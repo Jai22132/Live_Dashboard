@@ -1867,12 +1867,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ============================================================
-     BEGIN Transactions widget (Cashew → Google Drive → Supabase)
+     BEGIN Transactions widget (Toshl Finance → Supabase)
      Self-contained, isolated block. Reads the server-written
      app_state row 'finance_transactions' (read-only — the row is
      owned by /api/finance-sync, so it is NOT wired into
      initCloudSync). Talks only to Supabase REST (anon key) and to
-     /api/finance-sync — the browser never sees a Google token.
+     /api/finance-sync — TOSHL_API_TOKEN stays server-side and the
+     browser never sees it.
      To remove: delete BEGIN→END plus api/finance-sync.js and the
      crons entry in vercel.json.
      ============================================================ -->
@@ -1980,17 +1981,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
       text-align: center; font-size: 12px; font-style: italic;
       color: var(--text-tertiary); padding: 18px 0;
     }
-    .tx-connect-wrap { text-align: center; padding: 8px 0 10px; }
-    .tx-connect {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 11px 18px; border-radius: 12px;
-      background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
-      color: #0A0A0B; font-size: 13px; font-weight: 700;
-      text-decoration: none;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 22px rgba(0,0,0,0.25);
-      transition: transform 0.1s, filter 0.15s;
-    }
-    .tx-connect:hover { filter: brightness(1.06); transform: translateY(-1px); }
   </style>
 
   <div class="section-title">
@@ -1999,7 +1989,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   <div class="card">
     <div class="tx-head">
       <div>
-        <div class="label" style="margin-bottom:0">CASHEW · VIA GOOGLE DRIVE</div>
+        <div class="label" style="margin-bottom:0">TOSHL FINANCE</div>
         <div class="tx-last" id="txLast">—</div>
       </div>
       <button class="tx-sync-btn" id="txSyncBtn" type="button">⟳ Sync now</button>
@@ -2011,7 +2001,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
         <button class="tx-chip" type="button" data-acct="card">💳 Card</button>
       </div>
       <select class="tx-cat-select" id="txCat">
-        <option value="">All categories</option>
+        <option value="">All tags</option>
       </select>
     </div>
     <div id="txBody"><div class="tx-msg">Loading transactions…</div></div>
@@ -2034,10 +2024,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
   var doc = null;            // the finance_transactions row's data
   var acctFilter = 'all';    // all | cash | card
-  var catFilter = '';
+  var tagFilter = '';
 
-  // "Cash vs card": Cashew accounts (wallets) are free-form, so an
-  // account counts as cash when its name looks like cash.
+  // "Cash vs card": Toshl accounts are free-form, so an account
+  // counts as cash when its name looks like cash.
   function isCashAccount(name) {
     return /cash|efectivo|bargeld|esp[eè]ces|contanti/i.test(String(name || ''));
   }
@@ -2062,37 +2052,31 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 
   function showMsg(html) { body.innerHTML = '<div class="tx-msg">' + html + '</div>'; }
-  function showConnect(text) {
-    body.innerHTML =
-      '<div class="tx-msg">' + esc(text) + '</div>' +
-      '<div class="tx-connect-wrap"><a class="tx-connect" href="/api/google-auth-start">🔗 Connect Google</a></div>';
-  }
 
-  function fillCategories() {
-    var cats = (doc && doc.categories) || [];
-    var current = catFilter;
-    catSel.innerHTML = '<option value="">All categories</option>';
-    cats.slice().sort().forEach(function (c) {
+  function fillTags() {
+    var tags = (doc && doc.tags) || [];
+    var current = tagFilter;
+    catSel.innerHTML = '<option value="">All tags</option>';
+    tags.slice().sort().forEach(function (t) {
       var o = document.createElement('option');
-      o.value = c; o.textContent = c;
+      o.value = t; o.textContent = t;
       catSel.appendChild(o);
     });
-    catSel.value = cats.indexOf(current) !== -1 ? current : '';
+    catSel.value = tags.indexOf(current) !== -1 ? current : '';
   }
 
   function render() {
     if (!doc || !Array.isArray(doc.transactions)) {
-      showMsg('No synced data yet — tap <b>Sync now</b> to pull your Cashew backup.');
+      showMsg('No synced data yet — tap <b>Sync now</b> to pull your Toshl entries.');
       return;
     }
     lastEl.textContent = 'Last sync ' + (doc.synced_at ? new Date(doc.synced_at).toLocaleString() : '—') +
-      (doc.source_file && doc.source_file.name ? ' · ' + doc.source_file.name : '');
+      (doc.window ? ' · ' + doc.window.from + ' → ' + doc.window.to : '');
 
     var rows = doc.transactions.filter(function (t) {
-      if (t.paid === false) return false;   // skip upcoming/unpaid entries
       if (acctFilter === 'cash' && !isCashAccount(t.account)) return false;
       if (acctFilter === 'card' && isCashAccount(t.account)) return false;
-      if (catFilter && t.category !== catFilter && t.subCategory !== catFilter) return false;
+      if (tagFilter && (!t.tags || t.tags.indexOf(tagFilter) === -1)) return false;
       return true;
     }).slice(0, 100);
 
@@ -2107,8 +2091,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
       row.innerHTML =
         '<div class="tx-bar ' + (up ? 'up' : 'down') + '"></div>' +
         '<div class="tx-info">' +
-          '<div class="tx-name">' + esc(t.name || t.category || '(no name)') + '</div>' +
-          '<div class="tx-meta">' + esc([t.account, t.category, t.subCategory].filter(Boolean).join(' · ')) + '</div>' +
+          '<div class="tx-name">' + esc(t.name || (t.tags && t.tags[0]) || '(no description)') + '</div>' +
+          '<div class="tx-meta">' + esc([t.account].concat(t.tags || []).filter(Boolean).join(' · ')) + '</div>' +
         '</div>' +
         '<div class="tx-amt-wrap">' +
           '<div class="tx-amt ' + (up ? 'up' : 'down') + '">' + esc(fmtAmt(t)) + '</div>' +
@@ -2129,7 +2113,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
       if (!res.ok) throw new Error('http ' + res.status);
       var rows = await res.json();
       doc = rows && rows[0] ? rows[0].data : null;
-      fillCategories();
+      fillTags();
       render();
     } catch (e) {
       showMsg('Couldn’t load transactions right now.');
@@ -2142,16 +2126,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     try {
       var res = await fetch('/api/finance-sync?write=1', { headers: { Accept: 'application/json' } });
       var data = await res.json();
-      if (data.connected === false) {
-        showConnect(data.revoked
-          ? 'Google access expired — reconnect to sync your Cashew backups.'
-          : 'Connect Google to pull your Cashew backups from Drive.');
-      } else if (data.error === 'drive_scope_missing') {
-        showConnect('Google is connected but without Drive access yet — reconnect once to grant it.');
-      } else if (data.error === 'no_backups_found') {
-        showMsg('No Cashew backup found in Drive yet. In Cashew: Settings → Backups → back up to Google Drive (same Google account), then sync again.');
-      } else if (data.error === 'schema_mismatch') {
-        showMsg('Backup found, but its schema didn’t match — nothing was written. Open <span style="font-family:var(--font-mono)">/api/finance-sync?mode=diagnose</span> to inspect it.');
+      if (data.error === 'not_configured') {
+        showMsg('Toshl isn’t configured yet — add the <span style="font-family:var(--font-mono)">TOSHL_API_TOKEN</span> env var in Vercel and redeploy.');
+      } else if (data.error === 'toshl_auth_failed') {
+        showMsg('Toshl rejected the API token — check <span style="font-family:var(--font-mono)">TOSHL_API_TOKEN</span> in Vercel.');
       } else if (data.error) {
         showMsg('Sync failed (' + esc(data.error) + '). Try again in a bit.');
       } else {
@@ -2174,7 +2152,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     });
     render();
   });
-  catSel.addEventListener('change', function () { catFilter = catSel.value; render(); });
+  catSel.addEventListener('change', function () { tagFilter = catSel.value; render(); });
   syncBtn.addEventListener('click', syncNow);
 
   load();

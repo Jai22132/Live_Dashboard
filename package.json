@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
-    "sql.js": "^1.13.0"
+    "@supabase/supabase-js": "^2.45.0"
   },
   "engines": {
     "node": ">=18"

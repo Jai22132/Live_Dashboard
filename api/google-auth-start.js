@@ -9,13 +9,7 @@
 // ============================================================
 import crypto from 'node:crypto';
 
-// calendar.readonly → day-agenda widget (Calendar module)
-// drive.appdata     → Finance module reads the Cashew backup file
-//                     that the Cashew app stores in the hidden
-//                     appDataFolder of this same Google account.
-const SCOPE =
-  'https://www.googleapis.com/auth/calendar.readonly' +
-  ' https://www.googleapis.com/auth/drive.appdata';
+const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 
 export default function handler(req, res) {
   const clientId = process.env.GOOGLE_CLIENT_ID;

@@ -64,30 +64,33 @@ Replace the old URL/key in these files:
 
 ---
 
-## 3. Finance (Cashew → Google Drive → Supabase) — optional
+## 3. Finance (Toshl Finance → Supabase) — optional
 
-Mirrors your [Cashew](https://cashewapp.web.app) budget transactions into the dashboard's
-**Finances → Transactions** tab. Reuses the same Google OAuth app as the Calendar module.
+Mirrors your [Toshl Finance](https://toshl.com) entries into the dashboard's
+**Finances → Transactions** tab.
 
-1. In **Google Cloud Console** (same project as the Calendar module):
-   - Enable the **Google Drive API**.
-   - Add the scope `https://www.googleapis.com/auth/drive.appdata` to the OAuth consent screen.
-2. In **Cashew** (signed into the **same** Google account): Settings → Backups →
-   back up to Google Drive. Cashew stores the backup in Drive's hidden `appDataFolder`.
-3. **Reconnect Google once** from the dashboard (the Connect button, or open
-   `/api/google-auth-start`) so the stored token gains Drive access.
-4. Confirm the parser reads your backup correctly **before anything is written**:
-   - `/api/finance-sync?mode=diagnose` → lists the Drive files + every table/column
-     found in the backup + sample rows. Writes nothing.
+1. In Toshl: **Settings → Developer → Personal access token** — create one.
+2. In Vercel → **Settings → Environment Variables**, add:
+
+   | Variable | Value |
+   |---|---|
+   | `TOSHL_API_TOKEN` | your Toshl personal access token |
+
+   This is a **server-side secret** (used only inside `/api/finance-sync` via HTTP
+   Basic Auth) — it never reaches the browser. Redeploy after adding it.
+3. Confirm the sync reads your data correctly **before anything is written**:
+   - `/api/finance-sync?mode=diagnose` → shows the date window, account/tag names and
+     sample raw + mapped entries. Writes nothing.
    - `/api/finance-sync` → dry run: shows exactly what would be stored. Writes nothing.
    - `/api/finance-sync?write=1` → actually upserts into `app_state.finance_transactions`.
-     If the backup doesn't match the expected Cashew schema, it aborts with a diagnostic
-     instead of writing.
-5. `vercel.json` schedules a daily cron (05:30 UTC) that runs the sync automatically.
+   - Optional `?from=YYYY-MM-DD&to=YYYY-MM-DD` on any mode to sync a manual range
+     (default: last 90 days).
+4. `vercel.json` schedules a daily cron (05:30 UTC) that runs the sync automatically.
    Optionally set a `CRON_SECRET` env var in Vercel to authenticate cron calls.
 
-Idempotency: transactions are keyed by Cashew's own `transaction_pk`, so repeated runs
-never duplicate entries; edits update in place and deletions in Cashew disappear here too.
+Idempotency: transactions are keyed by Toshl's entry id, so repeated runs never duplicate
+entries; edits update in place, entries deleted in Toshl are dropped from the synced
+window, and older transactions outside the window are preserved.
 
 ---
 
