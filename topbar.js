@@ -204,6 +204,9 @@ body.topbar-modal-open {
     </a>
     <button class="topbar-water-add" id="topbarWaterAdd" aria-label="Log one drink" type="button">+</button>
   </div>
+  <a href="reading.html" class="topbar-finance-btn" id="topbarReading" aria-label="Reading Vault">
+    <span class="topbar-finance-icon">📚</span>
+  </a>
   <a href="finance.html" class="topbar-finance-btn" id="topbarFinance" aria-label="Finance">
     <span class="topbar-finance-icon">📊</span>
   </a>

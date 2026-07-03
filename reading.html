@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="lock.js"></script>
+<script src="/api/config"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<title>Reading Vault · Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sync.js" defer></script>
+<script src="topbar.js" defer></script>
+
+<style>
+/* ===== Shared design tokens (same as the rest of the dashboard) ===== */
+:root {
+  --text-primary: #FAFAFA;
+  --text-secondary: #B8B6B0;
+  --text-tertiary: #76746E;
+  --success: #6BE3A4;
+  --warning: #F2C063;
+  --danger:  #FF6B6B;
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: #050506;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100vh; position: relative; overflow-x: hidden;
+  padding: max(28px, env(safe-area-inset-top)) 20px 60px;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background:
+    radial-gradient(circle at 82% 14%, rgba(224, 118, 88, 0.16), transparent 45%),
+    radial-gradient(circle at 18% 90%, rgba(180, 180, 200, 0.06), transparent 50%);
+  filter: blur(40px); pointer-events: none; z-index: -2;
+  animation: drift 36s ease-in-out infinite alternate;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.014) 1px, transparent 1px);
+  background-size: 3px 3px; pointer-events: none; z-index: -1;
+}
+@keyframes drift { 0%{transform:translate3d(0,0,0)} 100%{transform:translate3d(-22px,14px,0)} }
+
+.page { max-width: 1100px; margin: 0 auto; }
+.dash-title {
+  margin: 0 0 4px; font-size: 28px; font-weight: 700; letter-spacing: -0.025em;
+  background: linear-gradient(180deg, #FFFFFF 0%, #C7C4BC 120%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.dash-sub { font-size: 13px; color: var(--text-tertiary); margin: 0 0 18px; }
+@media (max-width: 480px) { .dash-title { font-size: 22px; } }
+
+/* ===== Tabs ===== */
+.rv-tabs {
+  display: flex; gap: 6px;
+  padding: 5px; margin-bottom: 16px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+}
+.rv-tab {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 12px;
+  border: 0; border-radius: 10px;
+  background: transparent; color: var(--text-tertiary);
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.02em; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.rv-tab:hover { color: var(--text-secondary); }
+.rv-tab.active {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.rv-count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  min-width: 20px; padding: 2px 6px; border-radius: 999px;
+  background: rgba(255,255,255,0.06); color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.rv-tab.active .rv-count { background: rgba(255,255,255,0.12); color: var(--text-secondary); }
+
+.rv-panel[hidden] { display: none; }
+
+/* ===== Glass card ===== */
+.gm-card {
+  position: relative;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px; padding: 20px; margin-bottom: 14px;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  overflow: hidden;
+}
+
+/* ===== Book list ===== */
+.rv-list { list-style: none; margin: 0; padding: 0; }
+.empty-state {
+  text-align: center; font-size: 12px; font-style: italic;
+  color: var(--text-tertiary); padding: 22px 0;
+}
+.rv-book {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 13px 14px; margin-bottom: 8px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+.rv-book:hover { background: rgba(255,255,255,0.06); }
+.rv-book-body { flex: 1; min-width: 0; }
+.rv-title {
+  font-size: 14.5px; font-weight: 600; color: var(--text-primary);
+  outline: none; border-radius: 4px; padding: 2px 4px; margin: -2px -4px;
+  word-break: break-word;
+}
+.rv-author {
+  font-size: 12.5px; color: var(--text-secondary);
+  outline: none; border-radius: 4px; padding: 2px 4px; margin: 2px -4px 0;
+  word-break: break-word;
+}
+.rv-author:empty::before { content: 'Unknown author'; color: var(--text-tertiary); font-style: italic; }
+.rv-title[contenteditable="true"], .rv-author[contenteditable="true"] {
+  outline: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.28);
+}
+.rv-date {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 7px;
+  font-size: 11px; font-weight: 600; color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+.rv-date-btn {
+  border: 0; background: transparent; color: var(--warning);
+  font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  padding: 1px 4px; border-radius: 5px; text-decoration: underline dotted;
+}
+.rv-date-btn:hover { background: rgba(242,192,99,0.10); }
+.rv-date-input {
+  padding: 3px 8px; font-size: 11px; font-family: inherit;
+  color: var(--text-primary); background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.22); border-radius: 8px;
+  outline: none; color-scheme: dark;
+}
+
+/* Row action buttons */
+.rv-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.rv-icon-btn {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-size: 15px; line-height: 1; cursor: pointer;
+  padding: 5px 7px; border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.rv-icon-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.rv-done-btn:hover { color: var(--success); }
+.rv-delete:hover { color: var(--danger); }
+
+/* Inline "mark completed" date confirm */
+.rv-complete-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed rgba(255,255,255,0.10);
+}
+.rv-complete-bar .rv-hint {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-tertiary);
+}
+
+/* ===== Add form ===== */
+.rv-add {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.gm-input {
+  flex: 1; min-width: 130px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; background: rgba(0,0,0,0.28);
+  color: var(--text-primary);
+  font-family: inherit; font-size: 14px; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  color-scheme: dark;
+}
+.gm-input.rv-input-author { flex: 1; min-width: 120px; }
+.gm-input.rv-input-date { flex: 0 0 auto; min-width: 0; width: 150px; }
+.gm-input::placeholder { color: var(--text-tertiary); }
+.gm-input:focus { border-color: rgba(255,255,255,0.28); background: rgba(0,0,0,0.36); }
+.gm-add {
+  padding: 11px 20px; border: 0; border-radius: 12px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
+  color: #0A0A0B; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(0,0,0,0.35), 0 8px 22px rgba(0,0,0,0.25);
+  transition: transform 0.1s, filter 0.15s;
+}
+.gm-add:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.gm-add:active { transform: translateY(0); }
+.gm-ghost {
+  padding: 9px 16px; border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px; background: rgba(255,255,255,0.04);
+  color: var(--text-primary);
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.gm-ghost:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18); }
+.gm-add.rv-sm { padding: 9px 16px; font-size: 12px; }
+
+@media (max-width: 480px) {
+  body { padding: max(20px, env(safe-area-inset-top)) 14px 50px; }
+  .gm-card { padding: 16px; }
+  .gm-input.rv-input-date { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1 class="dash-title">Reading Vault</h1>
+  <p class="dash-sub">Books to read and books you've finished.</p>
+
+  <div class="rv-tabs" role="tablist">
+    <button class="rv-tab active" type="button" role="tab" data-panel="want" id="tabWant">
+      Want to Read <span class="rv-count" id="wantCount">0</span>
+    </button>
+    <button class="rv-tab" type="button" role="tab" data-panel="done" id="tabDone">
+      Completed <span class="rv-count" id="doneCount">0</span>
+    </button>
+  </div>
+
+  <!-- WANT TO READ -->
+  <div class="rv-panel" id="panelWant" role="tabpanel">
+    <div class="gm-card">
+      <ul class="rv-list" id="wantList"></ul>
+      <div class="empty-state" id="wantEmpty" hidden>Nothing on the list yet — add a book below.</div>
+      <div class="rv-add">
+        <input class="gm-input" id="wantTitle"  type="text" placeholder="Book title…"  autocomplete="off">
+        <input class="gm-input rv-input-author" id="wantAuthor" type="text" placeholder="Author (optional)" autocomplete="off">
+        <button class="gm-add" id="wantAdd" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPLETED -->
+  <div class="rv-panel" id="panelDone" role="tabpanel" hidden>
+    <div class="gm-card">
+      <ul class="rv-list" id="doneList"></ul>
+      <div class="empty-state" id="doneEmpty" hidden>No finished books yet.</div>
+      <div class="rv-add">
+        <input class="gm-input" id="doneTitle"  type="text" placeholder="Book title…"  autocomplete="off">
+        <input class="gm-input rv-input-author" id="doneAuthor" type="text" placeholder="Author (optional)" autocomplete="off">
+        <input class="gm-input rv-input-date" id="doneDate" type="date" aria-label="Date read">
+        <button class="gm-add" id="doneAdd" type="button">Add</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.page -->
+
+<script>
+(function () {
+  'use strict';
+
+  // Two synced localStorage keys → the Supabase row 'reading_vault' ends up
+  // holding exactly { want_to_read: [...], completed: [...] } (the sync helper
+  // builds each row's data object from the synced key NAMES — same pattern as
+  // the Finance page's 'subs', 'wishlist', etc.).
+  const WANT_KEY = 'want_to_read';
+  const DONE_KEY = 'completed';
+
+  const $ = (id) => document.getElementById(id);
+
+  function load(key) {
+    try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+  function save(key, arr) {
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+  function formatDate(yyyy_mm_dd) {
+    if (!yyyy_mm_dd) return '';
+    const p = String(yyyy_mm_dd).split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return yyyy_mm_dd;
+    const d = new Date(p[0], p[1] - 1, p[2]);
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return mo + ' ' + d.getDate() + ', ' + d.getFullYear();
+  }
+
+  // ---------- editable title / author ----------
+  function wireEdit(el, key, id, field) {
+    el.contentEditable = 'true';
+    el.spellcheck = false;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    });
+    el.addEventListener('blur', () => {
+      const next = el.textContent.trim();
+      const list = load(key);
+      const item = list.find(b => b.id === id);
+      if (!item) return;
+      if (field === 'title' && !next) { el.textContent = item.title; return; } // title required
+      if (item[field] === next) return;
+      item[field] = next;
+      save(key, list);
+    });
+  }
+
+  // ---------- render one book row ----------
+  function buildRow(book, key) {
+    const li = document.createElement('li');
+    li.className = 'rv-book';
+
+    const body = document.createElement('div');
+    body.className = 'rv-book-body';
+
+    const title = document.createElement('div');
+    title.className = 'rv-title';
+    title.textContent = book.title;
+    wireEdit(title, key, book.id, 'title');
+    body.appendChild(title);
+
+    const author = document.createElement('div');
+    author.className = 'rv-author';
+    author.textContent = book.author || '';
+    wireEdit(author, key, book.id, 'author');
+    body.appendChild(author);
+
+    // Completed books show an editable date-read.
+    if (key === DONE_KEY) {
+      const dateWrap = document.createElement('div');
+      dateWrap.className = 'rv-date';
+      const label = document.createElement('span');
+      label.textContent = '📖 Read';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'rv-date-btn';
+      btn.textContent = book.dateRead ? formatDate(book.dateRead) : 'set date';
+      btn.addEventListener('click', () => editDate(dateWrap, btn, book.id));
+      dateWrap.appendChild(label);
+      dateWrap.appendChild(btn);
+      body.appendChild(dateWrap);
+    }
+
+    li.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'rv-actions';
+
+    if (key === WANT_KEY) {
+      const doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.className = 'rv-icon-btn rv-done-btn';
+      doneBtn.title = 'Mark as completed';
+      doneBtn.textContent = '✓';
+      doneBtn.addEventListener('click', () => promptComplete(li, book));
+      actions.appendChild(doneBtn);
+    }
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'rv-icon-btn rv-delete';
+    del.title = 'Delete';
+    del.textContent = '×';
+    del.setAttribute('aria-label', 'Delete ' + book.title);
+    del.addEventListener('click', () => {
+      const list = load(key).filter(b => b.id !== book.id);
+      save(key, list);
+      renderAll();
+    });
+    actions.appendChild(del);
+
+    li.appendChild(actions);
+    return li;
+  }
+
+  // ---------- edit date-read on a completed book ----------
+  function editDate(wrap, btn, id) {
+    if (wrap.querySelector('.rv-date-input')) return;
+    const list = load(DONE_KEY);
+    const item = list.find(b => b.id === id);
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'rv-date-input';
+    input.value = (item && item.dateRead) || todayStr();
+    btn.style.display = 'none';
+    wrap.appendChild(input);
+    input.focus();
+    let done = false;
+    function commit() {
+      if (done) return; done = true;
+      const l = load(DONE_KEY);
+      const it = l.find(b => b.id === id);
+      if (it) { it.dateRead = input.value || ''; save(DONE_KEY, l); }
+      renderAll();
+    }
+    input.addEventListener('change', commit);
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { done = true; renderAll(); }
+    });
+  }
+
+  // ---------- move want → completed (prompt for date at that point) ----------
+  function promptComplete(li, book) {
+    if (li.querySelector('.rv-complete-bar')) return;
+    const bar = document.createElement('div');
+    bar.className = 'rv-complete-bar';
+
+    const hint = document.createElement('span');
+    hint.className = 'rv-hint';
+    hint.textContent = 'Finished on';
+
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.className = 'gm-input rv-input-date';
+    input.value = todayStr();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'gm-add rv-sm';
+    saveBtn.textContent = 'Mark read';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'gm-ghost';
+    cancelBtn.textContent = 'Cancel';
+
+    saveBtn.addEventListener('click', () => {
+      const wantList = load(WANT_KEY);
+      // Re-read fresh in case the title/author was just edited inline.
+      const cur = wantList.find(b => b.id === book.id) || book;
+      const want = wantList.filter(b => b.id !== book.id);
+      const done = load(DONE_KEY);
+      done.unshift({ id: cur.id, title: cur.title, author: cur.author || '', dateRead: input.value || todayStr() });
+      save(WANT_KEY, want);
+      save(DONE_KEY, done);
+      renderAll();
+    });
+    cancelBtn.addEventListener('click', () => bar.remove());
+
+    bar.append(hint, input, saveBtn, cancelBtn);
+    li.querySelector('.rv-book-body').appendChild(bar);
+    input.focus();
+  }
+
+  // ---------- render both lists ----------
+  function renderList(key, listEl, emptyEl) {
+    const items = load(key);
+    listEl.innerHTML = '';
+    emptyEl.hidden = items.length !== 0;
+    items.forEach(b => listEl.appendChild(buildRow(b, key)));
+  }
+  function renderAll() {
+    renderList(WANT_KEY, $('wantList'), $('wantEmpty'));
+    renderList(DONE_KEY, $('doneList'), $('doneEmpty'));
+    $('wantCount').textContent = load(WANT_KEY).length;
+    $('doneCount').textContent = load(DONE_KEY).length;
+  }
+
+  // ---------- add handlers ----------
+  function addWant() {
+    const title = $('wantTitle').value.trim();
+    if (!title) { $('wantTitle').focus(); return; }
+    const list = load(WANT_KEY);
+    list.unshift({ id: uid(), title, author: $('wantAuthor').value.trim() });
+    save(WANT_KEY, list);
+    $('wantTitle').value = ''; $('wantAuthor').value = '';
+    renderAll();
+    $('wantTitle').focus();
+  }
+  function addDone() {
+    const title = $('doneTitle').value.trim();
+    if (!title) { $('doneTitle').focus(); return; }
+    const list = load(DONE_KEY);
+    list.unshift({ id: uid(), title, author: $('doneAuthor').value.trim(), dateRead: $('doneDate').value || todayStr() });
+    save(DONE_KEY, list);
+    $('doneTitle').value = ''; $('doneAuthor').value = ''; $('doneDate').value = '';
+    renderAll();
+    $('doneTitle').focus();
+  }
+
+  $('wantAdd').addEventListener('click', addWant);
+  $('doneAdd').addEventListener('click', addDone);
+  $('wantTitle').addEventListener('keydown',  (e) => { if (e.key === 'Enter') { e.preventDefault(); $('wantAuthor').focus(); } });
+  $('wantAuthor').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWant(); } });
+  $('doneTitle').addEventListener('keydown',  (e) => { if (e.key === 'Enter') { e.preventDefault(); $('doneAuthor').focus(); } });
+  $('doneAuthor').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('doneDate').focus(); } });
+
+  // ---------- tabs ----------
+  function switchTab(panel) {
+    const isWant = panel === 'want';
+    $('tabWant').classList.toggle('active', isWant);
+    $('tabDone').classList.toggle('active', !isWant);
+    $('panelWant').hidden = !isWant;
+    $('panelDone').hidden = isWant;
+  }
+  $('tabWant').addEventListener('click', () => switchTab('want'));
+  $('tabDone').addEventListener('click', () => switchTab('done'));
+
+  // ---------- boot ----------
+  renderAll();
+
+  // ---------- cloud sync ----------
+  if (window.initCloudSync) {
+    window.initCloudSync({
+      appKey: 'reading_vault',
+      syncedKeys: [WANT_KEY, DONE_KEY],
+      onApplied: renderAll
+    });
+  }
+  window.addEventListener('storage', renderAll);
+})();
+</script>
+</body>
+</html>

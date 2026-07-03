@@ -595,6 +595,82 @@ body::after {
   .gm-card { padding: 16px; }
   .gm-progress-num { font-size: 36px; }
 }
+
+/* ===== Tags & tag filtering (goals list) ===== */
+.gm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gm-main .gm-text { flex: none; }
+
+.gm-tags {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 7px;
+}
+.gm-tags:empty { display: none; }
+
+.gm-tag {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 4px 2px 9px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 999px;
+}
+.gm-tag-x {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-size: 14px; line-height: 1; cursor: pointer;
+  padding: 0 2px; border-radius: 999px;
+  transition: color 0.15s;
+}
+.gm-tag-x:hover { color: var(--danger); }
+.gm-tag-input {
+  width: 116px; padding: 3px 10px;
+  font-size: 11px; font-family: inherit;
+  color: var(--text-primary);
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px; outline: none;
+}
+
+.gm-tag-btn {
+  border: 0; background: transparent;
+  color: var(--text-tertiary);
+  font-size: 14px; font-weight: 700; line-height: 1;
+  cursor: pointer; padding: 4px 6px;
+  border-radius: 6px; opacity: 0.55;
+  transition: opacity 0.2s, color 0.2s;
+}
+.gm-tag-btn:hover { opacity: 1; color: var(--text-primary); }
+
+/* Filter bar */
+.gm-filter {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 14px;
+}
+.gm-filter-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-tertiary);
+}
+.gm-filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gm-filter-chip {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.gm-filter-chip:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.gm-filter-chip.on {
+  background: rgba(107,227,164,0.16);
+  border-color: rgba(107,227,164,0.45);
+  color: #CFF6E3;
+}
+.gm-filter-clear {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  cursor: pointer; text-decoration: underline; padding: 4px 2px;
+}
+.gm-filter-clear:hover { color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -643,6 +719,14 @@ body::after {
 
   <div class="section">
     <div class="section-title">To Do List</div>
+
+    <!-- Tag filter (applies to both Today and Plan-tomorrow) -->
+    <div class="gm-filter" id="gmFilter" hidden>
+      <span class="gm-filter-label">Tags</span>
+      <div class="gm-filter-chips" id="gmFilterChips"></div>
+      <button type="button" class="gm-filter-clear" id="gmFilterClear" hidden>Clear</button>
+    </div>
+    <datalist id="gmTagSuggestions"></datalist>
 
     <!-- TODAY -->
     <div class="gm-card" id="gmCardToday">
@@ -960,6 +1044,114 @@ body::after {
   }
   function setGoals(key, list) { storeSet(key, list); }
 
+  // ---------- tags + tag filtering ----------
+  const activeTags = new Set(); // stored lowercased for case-insensitive matching
+  function lc(s) { return String(s).toLowerCase(); }
+
+  function collectAllTags() {
+    const seen = new Map(); // lower -> first-seen display casing
+    storeListKeys('goals:').forEach(k => {
+      getGoals(k).forEach(g => {
+        (Array.isArray(g.tags) ? g.tags : []).forEach(t => {
+          if (t && !seen.has(lc(t))) seen.set(lc(t), t);
+        });
+      });
+    });
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  }
+  function matchesFilter(goal) {
+    if (activeTags.size === 0) return true;
+    const tags = Array.isArray(goal.tags) ? goal.tags : [];
+    return tags.some(t => activeTags.has(lc(t)));
+  }
+  function addTag(key, idx, raw, reload) {
+    const tag = String(raw || '').trim();
+    if (!tag) { if (reload) reload(); return; }
+    const list = getGoals(key);
+    if (!list[idx]) return;
+    if (!Array.isArray(list[idx].tags)) list[idx].tags = [];
+    if (!list[idx].tags.some(t => lc(t) === lc(tag))) list[idx].tags.push(tag);
+    setGoals(key, list);
+    if (reload) reload();
+  }
+  function removeTag(key, idx, tag, reload) {
+    const list = getGoals(key);
+    if (!list[idx] || !Array.isArray(list[idx].tags)) return;
+    list[idx].tags = list[idx].tags.filter(t => t !== tag);
+    setGoals(key, list);
+    if (reload) reload();
+  }
+
+  function refreshTagUI() {
+    const pool = collectAllTags();
+    const poolLc = new Set(pool.map(lc));
+
+    const dl = document.getElementById('gmTagSuggestions');
+    if (dl) {
+      dl.innerHTML = '';
+      pool.forEach(t => { const o = document.createElement('option'); o.value = t; dl.appendChild(o); });
+    }
+
+    // drop any active filters whose tag no longer exists anywhere
+    Array.from(activeTags).forEach(t => { if (!poolLc.has(t)) activeTags.delete(t); });
+
+    const bar = document.getElementById('gmFilter');
+    const chips = document.getElementById('gmFilterChips');
+    const clear = document.getElementById('gmFilterClear');
+    if (!bar || !chips) return;
+    chips.innerHTML = '';
+    if (pool.length === 0) { bar.hidden = true; return; }
+    bar.hidden = false;
+    pool.forEach(t => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gm-filter-chip' + (activeTags.has(lc(t)) ? ' on' : '');
+      b.textContent = t;
+      b.addEventListener('click', () => {
+        if (activeTags.has(lc(t))) activeTags.delete(lc(t)); else activeTags.add(lc(t));
+        loadToday(); loadTomorrow();
+      });
+      chips.appendChild(b);
+    });
+    if (clear) clear.hidden = activeTags.size === 0;
+  }
+
+  function renderTagChips(container, goal, idx, key, reload) {
+    container.innerHTML = '';
+    (Array.isArray(goal.tags) ? goal.tags : []).forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'gm-tag';
+      chip.appendChild(document.createTextNode(tag));
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'gm-tag-x';
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Remove tag ' + tag);
+      x.addEventListener('click', (e) => { e.stopPropagation(); removeTag(key, idx, tag, reload); });
+      chip.appendChild(x);
+      container.appendChild(chip);
+    });
+  }
+  function openTagInput(container, key, idx, reload) {
+    let input = container.querySelector('.gm-tag-input');
+    if (input) { input.focus(); return; }
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'gm-tag-input';
+    input.setAttribute('list', 'gmTagSuggestions');
+    input.setAttribute('placeholder', 'tag…');
+    input.autocomplete = 'off';
+    container.appendChild(input);
+    input.focus();
+    let done = false;
+    function commit() { if (done) return; done = true; addTag(key, idx, input.value, reload); }
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { done = true; if (reload) reload(); }
+    });
+    input.addEventListener('blur', commit);
+  }
+
   // ---------- rollover: pull undone older goals into today ----------
   function rollover() {
     const todayDateStr = getActiveDateString();
@@ -973,7 +1165,7 @@ body::after {
       const old = getGoals(k);
       old.forEach(g => {
         if (!g.done && g.text && !texts.has(g.text)) {
-          today.push({ text: g.text, done: false });
+          today.push({ text: g.text, done: false, tags: Array.isArray(g.tags) ? g.tags.slice() : [] });
           texts.add(g.text);
         }
       });
@@ -1263,11 +1455,28 @@ body::after {
     });
     li.appendChild(cb);
 
+    const main = document.createElement('div');
+    main.className = 'gm-main';
+
     const text = document.createElement('span');
     text.className = 'gm-text';
     text.textContent = goal.text;
-    li.appendChild(text);
+    main.appendChild(text);
     makeInlineEdit(text, null, idx, key, reload);
+
+    const tagsEl = document.createElement('div');
+    tagsEl.className = 'gm-tags';
+    renderTagChips(tagsEl, goal, idx, key, reload);
+    main.appendChild(tagsEl);
+    li.appendChild(main);
+
+    const tagBtn = document.createElement('button');
+    tagBtn.type = 'button';
+    tagBtn.className = 'gm-tag-btn';
+    tagBtn.textContent = '#';
+    tagBtn.title = 'Add tag';
+    tagBtn.addEventListener('click', () => openTagInput(tagsEl, key, idx, reload));
+    li.appendChild(tagBtn);
 
     const queueBtn = document.createElement('button');
     queueBtn.type = 'button';
@@ -1347,26 +1556,37 @@ body::after {
 
   function renderListInto(goals, listEl, emptyEl, key, readOnly) {
     listEl.innerHTML = '';
-    emptyEl.style.display = goals.length === 0 ? 'block' : 'none';
     const reload = () => (key === todayKey() ? loadToday() : loadTomorrow());
 
-    const visible = goals.length > 5 ? goals.slice(0, 5) : goals;
-    visible.forEach((g, i) => listEl.appendChild(buildGoalRow(g, i, key, readOnly, reload)));
+    // Keep each item's true storage index so edit/delete/drag stay correct
+    // even when the tag filter hides some items.
+    const entries = goals
+      .map((g, idx) => ({ g, idx }))
+      .filter(e => matchesFilter(e.g));
 
-    if (goals.length > 5) {
+    if (!emptyEl.dataset.default) emptyEl.dataset.default = emptyEl.textContent;
+    emptyEl.style.display = entries.length === 0 ? 'block' : 'none';
+    emptyEl.textContent = (goals.length > 0 && activeTags.size > 0)
+      ? 'No items match the selected tags.'
+      : emptyEl.dataset.default;
+
+    const visible = entries.length > 5 ? entries.slice(0, 5) : entries;
+    visible.forEach(e => listEl.appendChild(buildGoalRow(e.g, e.idx, key, readOnly, reload)));
+
+    if (entries.length > 5) {
       let expanded = false;
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'gm-show-toggle';
       const updateLabel = () => {
-        toggle.textContent = expanded ? 'Show less ▴' : ('Show ' + (goals.length - 5) + ' more ▾');
+        toggle.textContent = expanded ? 'Show less ▴' : ('Show ' + (entries.length - 5) + ' more ▾');
       };
       updateLabel();
       toggle.addEventListener('click', () => {
         expanded = !expanded;
         if (expanded) {
-          goals.slice(5).forEach((g, i) => {
-            const row = buildGoalRow(g, i + 5, key, readOnly, reload);
+          entries.slice(5).forEach(e => {
+            const row = buildGoalRow(e.g, e.idx, key, readOnly, reload);
             listEl.insertBefore(row, toggle);
           });
         } else {
@@ -1382,10 +1602,12 @@ body::after {
   }
 
   function loadToday() {
+    refreshTagUI();
     const goals = getGoals(todayKey());
     renderListInto(goals, document.getElementById('goalList'), document.getElementById('emptyState'), todayKey(), false);
   }
   function loadTomorrow() {
+    refreshTagUI();
     const goals = getGoals(tomorrowKey());
     renderListInto(goals, document.getElementById('tomorrowList'), document.getElementById('tomorrowEmpty'), tomorrowKey(), true);
   }
@@ -1399,7 +1621,7 @@ body::after {
     const tomorrow = getGoals(tomorrowKey());
     const seen = new Set(tomorrow.map(g => g.text));
     remaining.forEach(g => {
-      if (!seen.has(g.text)) { tomorrow.push({ text: g.text, done: false }); seen.add(g.text); }
+      if (!seen.has(g.text)) { tomorrow.push({ text: g.text, done: false, tags: Array.isArray(g.tags) ? g.tags.slice() : [] }); seen.add(g.text); }
     });
     setGoals(tomorrowKey(), tomorrow);
     setGoals(todayKey(), today.filter(g => g.done));
@@ -1444,7 +1666,9 @@ body::after {
   function makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload) {
     function plainAdd(text) {
       const list = getGoals(key);
-      list.push({ text, done: false });
+      // Inherit any active filter tags so the new item stays visible while filtering.
+      const inherited = collectAllTags().filter(t => activeTags.has(lc(t)));
+      list.push({ text, done: false, tags: inherited });
       setGoals(key, list);
       input.value = '';
       reload();
@@ -1494,6 +1718,15 @@ body::after {
     document.getElementById('tomorrowStatus'),
     loadTomorrow
   );
+
+  // ---------- Tag filter: clear ----------
+  (function () {
+    const clearBtn = document.getElementById('gmFilterClear');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      activeTags.clear();
+      loadToday(); loadTomorrow();
+    });
+  })();
 
   // ---------- Boot ----------
   rollover();
