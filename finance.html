@@ -1866,6 +1866,322 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   </div>
 </div>
 
+<!-- ============================================================
+     BEGIN Transactions widget (Cashew → Google Drive → Supabase)
+     Self-contained, isolated block. Reads the server-written
+     app_state row 'finance_transactions' (read-only — the row is
+     owned by /api/finance-sync, so it is NOT wired into
+     initCloudSync). Talks only to Supabase REST (anon key) and to
+     /api/finance-sync — the browser never sees a Google token.
+     To remove: delete BEGIN→END plus api/finance-sync.js and the
+     crons entry in vercel.json.
+     ============================================================ -->
+<div class="section" data-section="txns">
+  <style>
+    .tx-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; margin-bottom: 12px;
+    }
+    .tx-last {
+      font-size: 11px; color: var(--text-tertiary);
+      font-family: var(--font-mono); margin-top: 3px;
+    }
+    .tx-sync-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: var(--text-secondary);
+      font-family: inherit; font-size: 11.5px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 7px 12px; border-radius: 8px; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .tx-sync-btn:hover { background: rgba(255,255,255,0.10); color: var(--text-primary); }
+    .tx-sync-btn:disabled { opacity: 0.5; cursor: default; }
+    .tx-filters {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-bottom: 12px;
+    }
+    .tx-chips { display: flex; gap: 4px; }
+    .tx-chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid transparent;
+      color: var(--text-tertiary);
+      font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 6px 12px; border-radius: 999px; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tx-chip:hover { color: var(--text-secondary); }
+    .tx-chip.active {
+      color: var(--text-primary);
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .tx-cat-select {
+      margin-left: auto;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 999px;
+      color: var(--text-secondary);
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      padding: 6px 12px; cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+      max-width: 180px;
+    }
+    .tx-list {
+      display: flex; flex-direction: column; gap: 6px;
+      max-height: 480px; overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .tx-list::-webkit-scrollbar { width: 4px !important; display: block !important; }
+    .tx-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
+    .tx-row {
+      display: grid; grid-template-columns: 4px 1fr auto;
+      gap: 10px; align-items: center;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.025);
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .tx-row:hover { background: rgba(255,255,255,0.05); }
+    .tx-bar {
+      width: 4px; height: 24px; border-radius: 2px;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .tx-bar.up   { color: #6BE3A4; background: #6BE3A4; }
+    .tx-bar.down { color: #FF8A8A; background: #FF8A8A; }
+    .tx-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .tx-name {
+      color: var(--text-primary); font-weight: 600; font-size: 13px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tx-meta {
+      font-size: 10.5px; color: var(--text-tertiary);
+      font-family: var(--font-mono); letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tx-amt-wrap { text-align: right; }
+    .tx-amt {
+      font-size: 13px; font-weight: 700;
+      font-variant-numeric: tabular-nums; font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+    .tx-amt.up   { color: #6BE3A4; }
+    .tx-amt.down { color: #FF8A8A; }
+    .tx-date {
+      font-size: 10px; color: var(--text-tertiary);
+      font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    }
+    .tx-msg {
+      text-align: center; font-size: 12px; font-style: italic;
+      color: var(--text-tertiary); padding: 18px 0;
+    }
+    .tx-connect-wrap { text-align: center; padding: 8px 0 10px; }
+    .tx-connect {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 18px; border-radius: 12px;
+      background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
+      color: #0A0A0B; font-size: 13px; font-weight: 700;
+      text-decoration: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 22px rgba(0,0,0,0.25);
+      transition: transform 0.1s, filter 0.15s;
+    }
+    .tx-connect:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  </style>
+
+  <div class="section-title">
+    <span class="section-title-text">TRANSACTIONS</span>
+  </div>
+  <div class="card">
+    <div class="tx-head">
+      <div>
+        <div class="label" style="margin-bottom:0">CASHEW · VIA GOOGLE DRIVE</div>
+        <div class="tx-last" id="txLast">—</div>
+      </div>
+      <button class="tx-sync-btn" id="txSyncBtn" type="button">⟳ Sync now</button>
+    </div>
+    <div class="tx-filters">
+      <div class="tx-chips" id="txChips">
+        <button class="tx-chip active" type="button" data-acct="all">All</button>
+        <button class="tx-chip" type="button" data-acct="cash">💵 Cash</button>
+        <button class="tx-chip" type="button" data-acct="card">💳 Card</button>
+      </div>
+      <select class="tx-cat-select" id="txCat">
+        <option value="">All categories</option>
+      </select>
+    </div>
+    <div id="txBody"><div class="tx-msg">Loading transactions…</div></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // Same public config + fallbacks as sync.js — anon key only.
+  var SUPA_URL = window.DASH_SUPABASE_URL || 'https://awytpwgorebhjewlqlhs.supabase.co';
+  var SUPA_KEY = window.DASH_SUPABASE_KEY || 'sb_publishable_iyTy90Bi9Ct9ZMY0nu9hjA_N5BFmlFN';
+
+  var body = document.getElementById('txBody');
+  var lastEl = document.getElementById('txLast');
+  var syncBtn = document.getElementById('txSyncBtn');
+  var chipsEl = document.getElementById('txChips');
+  var catSel = document.getElementById('txCat');
+  if (!body || !syncBtn || !chipsEl || !catSel) return;
+
+  var doc = null;            // the finance_transactions row's data
+  var acctFilter = 'all';    // all | cash | card
+  var catFilter = '';
+
+  // "Cash vs card": Cashew accounts (wallets) are free-form, so an
+  // account counts as cash when its name looks like cash.
+  function isCashAccount(name) {
+    return /cash|efectivo|bargeld|esp[eè]ces|contanti/i.test(String(name || ''));
+  }
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtAmt(t) {
+    var n = Number(t.amount) || 0;
+    var s = (n > 0 ? '+' : n < 0 ? '−' : '') +
+      Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return s + (t.currency ? ' ' + t.currency : '');
+  }
+  var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return MO[d.getMonth()] + ' ' + d.getDate() +
+      (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+
+  function showMsg(html) { body.innerHTML = '<div class="tx-msg">' + html + '</div>'; }
+  function showConnect(text) {
+    body.innerHTML =
+      '<div class="tx-msg">' + esc(text) + '</div>' +
+      '<div class="tx-connect-wrap"><a class="tx-connect" href="/api/google-auth-start">🔗 Connect Google</a></div>';
+  }
+
+  function fillCategories() {
+    var cats = (doc && doc.categories) || [];
+    var current = catFilter;
+    catSel.innerHTML = '<option value="">All categories</option>';
+    cats.slice().sort().forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      catSel.appendChild(o);
+    });
+    catSel.value = cats.indexOf(current) !== -1 ? current : '';
+  }
+
+  function render() {
+    if (!doc || !Array.isArray(doc.transactions)) {
+      showMsg('No synced data yet — tap <b>Sync now</b> to pull your Cashew backup.');
+      return;
+    }
+    lastEl.textContent = 'Last sync ' + (doc.synced_at ? new Date(doc.synced_at).toLocaleString() : '—') +
+      (doc.source_file && doc.source_file.name ? ' · ' + doc.source_file.name : '');
+
+    var rows = doc.transactions.filter(function (t) {
+      if (t.paid === false) return false;   // skip upcoming/unpaid entries
+      if (acctFilter === 'cash' && !isCashAccount(t.account)) return false;
+      if (acctFilter === 'card' && isCashAccount(t.account)) return false;
+      if (catFilter && t.category !== catFilter && t.subCategory !== catFilter) return false;
+      return true;
+    }).slice(0, 100);
+
+    if (!rows.length) { showMsg('No transactions match this filter.'); return; }
+
+    var list = document.createElement('div');
+    list.className = 'tx-list';
+    rows.forEach(function (t) {
+      var up = t.income || Number(t.amount) > 0;
+      var row = document.createElement('div');
+      row.className = 'tx-row';
+      row.innerHTML =
+        '<div class="tx-bar ' + (up ? 'up' : 'down') + '"></div>' +
+        '<div class="tx-info">' +
+          '<div class="tx-name">' + esc(t.name || t.category || '(no name)') + '</div>' +
+          '<div class="tx-meta">' + esc([t.account, t.category, t.subCategory].filter(Boolean).join(' · ')) + '</div>' +
+        '</div>' +
+        '<div class="tx-amt-wrap">' +
+          '<div class="tx-amt ' + (up ? 'up' : 'down') + '">' + esc(fmtAmt(t)) + '</div>' +
+          '<div class="tx-date">' + esc(fmtDate(t.date)) + '</div>' +
+        '</div>';
+      list.appendChild(row);
+    });
+    body.innerHTML = '';
+    body.appendChild(list);
+  }
+
+  async function load() {
+    try {
+      var res = await fetch(
+        SUPA_URL + '/rest/v1/app_state?select=data&key=eq.finance_transactions',
+        { headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY } }
+      );
+      if (!res.ok) throw new Error('http ' + res.status);
+      var rows = await res.json();
+      doc = rows && rows[0] ? rows[0].data : null;
+      fillCategories();
+      render();
+    } catch (e) {
+      showMsg('Couldn’t load transactions right now.');
+    }
+  }
+
+  async function syncNow() {
+    syncBtn.disabled = true;
+    syncBtn.textContent = '⟳ Syncing…';
+    try {
+      var res = await fetch('/api/finance-sync?write=1', { headers: { Accept: 'application/json' } });
+      var data = await res.json();
+      if (data.connected === false) {
+        showConnect(data.revoked
+          ? 'Google access expired — reconnect to sync your Cashew backups.'
+          : 'Connect Google to pull your Cashew backups from Drive.');
+      } else if (data.error === 'drive_scope_missing') {
+        showConnect('Google is connected but without Drive access yet — reconnect once to grant it.');
+      } else if (data.error === 'no_backups_found') {
+        showMsg('No Cashew backup found in Drive yet. In Cashew: Settings → Backups → back up to Google Drive (same Google account), then sync again.');
+      } else if (data.error === 'schema_mismatch') {
+        showMsg('Backup found, but its schema didn’t match — nothing was written. Open <span style="font-family:var(--font-mono)">/api/finance-sync?mode=diagnose</span> to inspect it.');
+      } else if (data.error) {
+        showMsg('Sync failed (' + esc(data.error) + '). Try again in a bit.');
+      } else {
+        await load();
+      }
+    } catch (e) {
+      showMsg('Sync failed — check your connection and try again.');
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = '⟳ Sync now';
+    }
+  }
+
+  chipsEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tx-chip');
+    if (!btn) return;
+    acctFilter = btn.dataset.acct || 'all';
+    chipsEl.querySelectorAll('.tx-chip').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    render();
+  });
+  catSel.addEventListener('change', function () { catFilter = catSel.value; render(); });
+  syncBtn.addEventListener('click', syncNow);
+
+  load();
+})();
+</script>
+<!-- ============================================================ END Transactions widget ============================================================ -->
+
 </div>
 
 <!-- ===== BOTTOM TAB BAR ===== -->
@@ -1885,6 +2201,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   <button class="bot-tab" data-tab="wish">
     <span class="bot-tab-icon">🎯</span>
     <span class="bot-tab-label">Wishlist</span>
+  </button>
+  <button class="bot-tab" data-tab="txns">
+    <span class="bot-tab-icon">💳</span>
+    <span class="bot-tab-label">Transactions</span>
   </button>
 </nav>
 
@@ -1935,7 +2255,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
   tabs.forEach(b => b.addEventListener('click', () => setActiveTab(b.dataset.tab)));
   const savedTab = storeGet(TAB_KEY);
-  setActiveTab(savedTab && ['net','subs','incoming','wish'].includes(savedTab) ? savedTab : 'net');
+  setActiveTab(savedTab && ['net','subs','incoming','wish','txns'].includes(savedTab) ? savedTab : 'net');
 
   // ============================================================
   // NET WORTH (copied from the main dashboard, verbatim logic)

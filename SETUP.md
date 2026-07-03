@@ -64,7 +64,34 @@ Replace the old URL/key in these files:
 
 ---
 
-## 3. Nova (AI mentor / gym coach) — optional
+## 3. Finance (Cashew → Google Drive → Supabase) — optional
+
+Mirrors your [Cashew](https://cashewapp.web.app) budget transactions into the dashboard's
+**Finances → Transactions** tab. Reuses the same Google OAuth app as the Calendar module.
+
+1. In **Google Cloud Console** (same project as the Calendar module):
+   - Enable the **Google Drive API**.
+   - Add the scope `https://www.googleapis.com/auth/drive.appdata` to the OAuth consent screen.
+2. In **Cashew** (signed into the **same** Google account): Settings → Backups →
+   back up to Google Drive. Cashew stores the backup in Drive's hidden `appDataFolder`.
+3. **Reconnect Google once** from the dashboard (the Connect button, or open
+   `/api/google-auth-start`) so the stored token gains Drive access.
+4. Confirm the parser reads your backup correctly **before anything is written**:
+   - `/api/finance-sync?mode=diagnose` → lists the Drive files + every table/column
+     found in the backup + sample rows. Writes nothing.
+   - `/api/finance-sync` → dry run: shows exactly what would be stored. Writes nothing.
+   - `/api/finance-sync?write=1` → actually upserts into `app_state.finance_transactions`.
+     If the backup doesn't match the expected Cashew schema, it aborts with a diagnostic
+     instead of writing.
+5. `vercel.json` schedules a daily cron (05:30 UTC) that runs the sync automatically.
+   Optionally set a `CRON_SECRET` env var in Vercel to authenticate cron calls.
+
+Idempotency: transactions are keyed by Cashew's own `transaction_pk`, so repeated runs
+never duplicate entries; edits update in place and deletions in Cashew disappear here too.
+
+---
+
+## 4. Nova (AI mentor / gym coach) — optional
 
 No setup or key in the repo. Each user **pastes their own Anthropic API key** on the
 **Nova** tile; it's stored only in their browser and sent straight to Anthropic. Get a key at

@@ -1,0 +1,14 @@
+{
+  "crons": [
+    {
+      "path": "/api/finance-sync",
+      "schedule": "30 5 * * *"
+    }
+  ],
+  "functions": {
+    "api/finance-sync.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
+    }
+  }
+}
