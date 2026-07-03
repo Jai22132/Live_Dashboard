@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="lock.js"></script>
+<script src="/api/config"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<title>Training Hub · Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sync.js" defer></script>
+<script src="topbar.js" defer></script>
+
+<style>
+/* ===== Shared design tokens (same as the rest of the dashboard) ===== */
+:root {
+  --text-primary: #FAFAFA;
+  --text-secondary: #B8B6B0;
+  --text-tertiary: #76746E;
+  --success: #6BE3A4;
+  --warning: #F2C063;
+  --danger:  #FF6B6B;
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: #050506;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100vh; position: relative; overflow-x: hidden;
+  padding: max(28px, env(safe-area-inset-top)) 20px 60px;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background:
+    radial-gradient(circle at 82% 14%, rgba(224, 118, 88, 0.16), transparent 45%),
+    radial-gradient(circle at 18% 90%, rgba(180, 180, 200, 0.06), transparent 50%);
+  filter: blur(40px); pointer-events: none; z-index: -2;
+  animation: drift 36s ease-in-out infinite alternate;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.014) 1px, transparent 1px);
+  background-size: 3px 3px; pointer-events: none; z-index: -1;
+}
+@keyframes drift { 0%{transform:translate3d(0,0,0)} 100%{transform:translate3d(-22px,14px,0)} }
+
+.page { max-width: 1100px; margin: 0 auto; }
+.dash-title {
+  margin: 0 0 4px; font-size: 28px; font-weight: 700; letter-spacing: -0.025em;
+  background: linear-gradient(180deg, #FFFFFF 0%, #C7C4BC 120%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.dash-sub { font-size: 13px; color: var(--text-tertiary); margin: 0 0 18px; }
+@media (max-width: 480px) { .dash-title { font-size: 22px; } }
+
+/* ===== Tabs (same as Reading Vault) ===== */
+.rv-tabs {
+  display: flex; gap: 6px;
+  padding: 5px; margin-bottom: 16px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+}
+.rv-tab {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 12px;
+  border: 0; border-radius: 10px;
+  background: transparent; color: var(--text-tertiary);
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.02em; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.rv-tab:hover { color: var(--text-secondary); }
+.rv-tab.active {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.rv-count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  min-width: 20px; padding: 2px 6px; border-radius: 999px;
+  background: rgba(255,255,255,0.06); color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.rv-tab.active .rv-count { background: rgba(255,255,255,0.12); color: var(--text-secondary); }
+
+.rv-panel[hidden] { display: none; }
+
+/* ===== Glass card ===== */
+.gm-card {
+  position: relative;
+  background: rgba(255,255,255,0.04);
+  border-radius: 16px; padding: 20px; margin-bottom: 14px;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  overflow: hidden;
+}
+
+.empty-state {
+  text-align: center; font-size: 12px; font-style: italic;
+  color: var(--text-tertiary); padding: 22px 0;
+}
+
+/* ===== Buttons / inputs (shared) ===== */
+.gm-input {
+  flex: 1; min-width: 130px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; background: rgba(0,0,0,0.28);
+  color: var(--text-primary);
+  font-family: inherit; font-size: 14px; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  color-scheme: dark;
+}
+.gm-input::placeholder { color: var(--text-tertiary); }
+.gm-input:focus { border-color: rgba(255,255,255,0.28); background: rgba(0,0,0,0.36); }
+.gm-add {
+  padding: 11px 20px; border: 0; border-radius: 12px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
+  color: #0A0A0B; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(0,0,0,0.35), 0 8px 22px rgba(0,0,0,0.25);
+  transition: transform 0.1s, filter 0.15s;
+}
+.gm-add:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.gm-add:active { transform: translateY(0); }
+.gm-add.tr-sm { padding: 9px 16px; font-size: 12px; }
+.gm-ghost {
+  padding: 9px 16px; border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px; background: rgba(255,255,255,0.04);
+  color: var(--text-primary);
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.gm-ghost:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18); }
+
+.rv-icon-btn {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-size: 15px; line-height: 1; cursor: pointer;
+  padding: 5px 7px; border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.rv-icon-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.rv-delete:hover { color: var(--danger); }
+
+/* ===== Training Plan — routine cards ===== */
+.tr-routine { margin-bottom: 14px; }
+.tr-routine-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.tr-routine-name {
+  flex: 1; min-width: 0;
+  font-size: 17px; font-weight: 700; color: var(--text-primary);
+  letter-spacing: -0.01em;
+  outline: none; border-radius: 6px; padding: 3px 6px; margin: -3px -6px;
+  word-break: break-word;
+}
+.tr-routine-name[contenteditable="true"] {
+  outline: 1px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.28);
+}
+
+/* Exercise rows */
+.tr-ex-list { list-style: none; margin: 0 0 4px; padding: 0; }
+.tr-ex {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; margin-bottom: 7px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 11px;
+}
+.tr-ex-name {
+  flex: 2 1 150px; min-width: 100px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px; background: rgba(0,0,0,0.28);
+  color: var(--text-primary);
+  font-family: inherit; font-size: 13.5px; font-weight: 600; outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.tr-ex-name:focus { border-color: rgba(255,255,255,0.28); background: rgba(0,0,0,0.36); }
+.tr-metric {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex: 0 0 auto;
+}
+.tr-num {
+  width: 52px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px; background: rgba(0,0,0,0.28);
+  color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 13px; text-align: center; outline: none;
+  color-scheme: dark;
+  transition: border-color 0.2s, background 0.2s;
+}
+.tr-num.tr-num-w { width: 64px; }
+.tr-num:focus { border-color: rgba(255,255,255,0.28); background: rgba(0,0,0,0.36); }
+.tr-num::placeholder { color: var(--text-tertiary); font-family: var(--font); }
+.tr-metric-x { color: var(--text-tertiary); font-size: 12px; font-weight: 700; }
+.tr-metric-at { color: var(--text-tertiary); font-size: 12px; }
+
+.tr-ex-labels {
+  display: flex; gap: 8px; padding: 0 10px 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.tr-ex-labels .l-name { flex: 2 1 150px; min-width: 100px; }
+.tr-ex-labels .l-set { flex: 0 0 auto; width: 108px; text-align: center; }
+.tr-ex-labels .l-rep { flex: 0 0 auto; width: 0; }
+.tr-ex-labels .l-w { flex: 0 0 auto; }
+
+.tr-routine-foot {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 10px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* New-routine row */
+.tr-new {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+
+/* ===== Workout Log ===== */
+.tr-log-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+.gm-add.tr-check { font-size: 14px; padding: 13px 22px; }
+.gm-add.tr-check .tr-check-ic { margin-right: 7px; }
+
+.tr-log-list { list-style: none; margin: 0; padding: 0; }
+.tr-log-entry {
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.035);
+  border-radius: 12px; margin-bottom: 8px; overflow: hidden;
+}
+.tr-log-summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.tr-log-summary:hover { background: rgba(255,255,255,0.05); }
+.tr-log-chev {
+  color: var(--text-tertiary); font-size: 11px; flex-shrink: 0;
+  transition: transform 0.18s;
+}
+.tr-log-entry.open .tr-log-chev { transform: rotate(90deg); }
+.tr-log-main { flex: 1; min-width: 0; }
+.tr-log-name {
+  font-size: 14px; font-weight: 700; color: var(--text-primary);
+  word-break: break-word;
+}
+.tr-log-name .tr-freeform-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--warning); margin-left: 8px;
+  padding: 1px 6px; border-radius: 6px; background: rgba(242,192,99,0.10);
+}
+.tr-log-meta {
+  font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.tr-log-body { padding: 0 14px 12px; }
+.tr-log-body[hidden] { display: none; }
+.tr-log-table { width: 100%; border-collapse: collapse; }
+.tr-log-table th {
+  text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-tertiary);
+  padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.tr-log-table th.num, .tr-log-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tr-log-table td {
+  font-size: 13px; color: var(--text-secondary);
+  padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.tr-log-table td.ex { color: var(--text-primary); font-weight: 600; }
+.tr-log-table tr:last-child td { border-bottom: 0; }
+
+/* ===== Modal ===== */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 60;
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(3,3,4,0.66);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  overscroll-behavior: contain;
+}
+.modal-bg.show { display: flex; }
+.modal {
+  width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto;
+  background: #101012;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px; padding: 22px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+}
+.modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 4px;
+}
+.modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.modal-sub { font-size: 12.5px; color: var(--text-tertiary); margin: 2px 0 18px; }
+.modal-close {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 8px;
+}
+.modal-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+/* Choice buttons (template vs freeform) */
+.tr-choice { display: flex; flex-direction: column; gap: 12px; }
+.tr-choice-btn {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 16px 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px; background: rgba(255,255,255,0.04);
+  color: var(--text-primary); cursor: pointer; font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.tr-choice-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); }
+.tr-choice-btn:active { transform: scale(0.99); }
+.tr-choice-ic { font-size: 26px; line-height: 1; }
+.tr-choice-tt { font-size: 15px; font-weight: 700; }
+.tr-choice-dd { font-size: 12px; color: var(--text-tertiary); margin-top: 3px; }
+
+/* Template picker */
+.tr-tpl-list { display: flex; flex-direction: column; gap: 8px; }
+.tr-tpl-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 15px; text-align: left;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; background: rgba(255,255,255,0.035);
+  color: var(--text-primary); cursor: pointer; font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tr-tpl-item:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18); }
+.tr-tpl-nm { font-size: 14px; font-weight: 700; }
+.tr-tpl-ct { font-size: 11px; color: var(--text-tertiary); }
+
+/* Log builder form */
+.tr-form-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.tr-form-row label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.tr-build-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.tr-build-ex {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.tr-back-link {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 4px 0; margin-bottom: 10px;
+}
+.tr-back-link:hover { color: var(--text-secondary); }
+.modal-foot {
+  display: flex; gap: 10px; justify-content: flex-end;
+  margin-top: 16px; padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+@media (max-width: 480px) {
+  body { padding: max(20px, env(safe-area-inset-top)) 14px 50px; }
+  .gm-card { padding: 16px; }
+  .tr-ex { flex-wrap: wrap; }
+  .tr-ex-name { flex: 1 1 100%; }
+  .tr-ex-labels { display: none; }
+  .tr-num { width: 48px; }
+  .tr-num.tr-num-w { width: 58px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1 class="dash-title">Training Hub</h1>
+  <p class="dash-sub">Build your routines, then log what you actually lifted.</p>
+
+  <div class="rv-tabs" role="tablist">
+    <button class="rv-tab active" type="button" role="tab" data-panel="plan" id="tabPlan">
+      Training Plan <span class="rv-count" id="planCount">0</span>
+    </button>
+    <button class="rv-tab" type="button" role="tab" data-panel="log" id="tabLog">
+      Workout Log <span class="rv-count" id="logCount">0</span>
+    </button>
+  </div>
+
+  <!-- TRAINING PLAN -->
+  <div class="rv-panel" id="panelPlan" role="tabpanel">
+    <div id="routineList"></div>
+    <div class="empty-state" id="planEmpty" hidden>No routines yet — create one below.</div>
+
+    <div class="gm-card">
+      <div class="tr-new">
+        <input class="gm-input" id="newRoutineName" type="text" placeholder="New routine name (e.g. Push Day)…" autocomplete="off">
+        <button class="gm-add" id="addRoutineBtn" type="button">Create routine</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WORKOUT LOG -->
+  <div class="rv-panel" id="panelLog" role="tabpanel" hidden>
+    <div class="gm-card">
+      <div class="tr-log-actions">
+        <button class="gm-add tr-check" id="checkWorkoutBtn" type="button">
+          <span class="tr-check-ic">🏋️</span>Check Workout
+        </button>
+      </div>
+      <p class="dash-sub" style="margin:10px 0 0">Log from a saved routine or add a freeform session.</p>
+    </div>
+
+    <div class="gm-card">
+      <ul class="tr-log-list" id="logList"></ul>
+      <div class="empty-state" id="logEmpty" hidden>No workouts logged yet.</div>
+    </div>
+  </div>
+
+</div><!-- /.page -->
+
+<!-- ===== Modal ===== -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 class="modal-title" id="modalTitle">Check Workout</h2>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Two synced localStorage keys, each mirrored to its own Supabase app_state row:
+  //   'routines' → row 'training_plan' = { routines: [ { id, name, exercises:[{id,name,sets,reps,weight}] } ] }
+  //   'entries'  → row 'workout_log'   = { entries:  [ { id, date, routineName, exercises:[{name,sets,reps,weight}] } ] }
+  // The sync helper builds each row's data object from the synced key NAMES
+  // (same pattern as Reading Vault's 'want_to_read'/'completed').
+  const ROUTINES_KEY = 'routines';
+  const ENTRIES_KEY  = 'entries';
+
+  const $ = (id) => document.getElementById(id);
+
+  function load(key) {
+    try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+  function save(key, arr) {
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+  function formatDate(yyyy_mm_dd) {
+    if (!yyyy_mm_dd) return '';
+    const p = String(yyyy_mm_dd).split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return yyyy_mm_dd;
+    const d = new Date(p[0], p[1] - 1, p[2]);
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return mo + ' ' + d.getDate() + ', ' + d.getFullYear();
+  }
+
+  // =========================================================
+  //  TRAINING PLAN
+  // =========================================================
+  function findRoutine(list, id) { return list.find(r => r.id === id); }
+
+  // Editable routine name
+  function wireRoutineName(el, id) {
+    el.contentEditable = 'true';
+    el.spellcheck = false;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    });
+    el.addEventListener('blur', () => {
+      const next = el.textContent.trim();
+      const list = load(ROUTINES_KEY);
+      const r = findRoutine(list, id);
+      if (!r) return;
+      if (!next) { el.textContent = r.name; return; } // name required
+      if (r.name === next) return;
+      r.name = next;
+      save(ROUTINES_KEY, list);
+    });
+  }
+
+  // Persist a single exercise field edit
+  function updateExercise(routineId, exId, field, value) {
+    const list = load(ROUTINES_KEY);
+    const r = findRoutine(list, routineId);
+    if (!r) return;
+    const ex = (r.exercises || []).find(x => x.id === exId);
+    if (!ex) return;
+    if (ex[field] === value) return;
+    ex[field] = value;
+    save(ROUTINES_KEY, list);
+  }
+
+  function buildExerciseRow(routineId, ex) {
+    const li = document.createElement('li');
+    li.className = 'tr-ex';
+
+    const name = document.createElement('input');
+    name.className = 'tr-ex-name';
+    name.type = 'text';
+    name.placeholder = 'Exercise name';
+    name.value = ex.name || '';
+    name.addEventListener('change', () => updateExercise(routineId, ex.id, 'name', name.value.trim()));
+    li.appendChild(name);
+
+    // sets × reps @ weight
+    const metric = document.createElement('div');
+    metric.className = 'tr-metric';
+
+    function numField(field, ph, extraClass) {
+      const inp = document.createElement('input');
+      inp.className = 'tr-num' + (extraClass ? ' ' + extraClass : '');
+      inp.type = 'text';
+      inp.inputMode = 'decimal';
+      inp.placeholder = ph;
+      inp.value = ex[field] || '';
+      inp.setAttribute('aria-label', ph);
+      inp.addEventListener('change', () => updateExercise(routineId, ex.id, field, inp.value.trim()));
+      return inp;
+    }
+    const x = document.createElement('span'); x.className = 'tr-metric-x'; x.textContent = '×';
+    const at = document.createElement('span'); at.className = 'tr-metric-at'; at.textContent = '@';
+    metric.appendChild(numField('sets', 'sets'));
+    metric.appendChild(x);
+    metric.appendChild(numField('reps', 'reps'));
+    metric.appendChild(at);
+    metric.appendChild(numField('weight', 'kg', 'tr-num-w'));
+    li.appendChild(metric);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'rv-icon-btn rv-delete';
+    del.title = 'Remove exercise';
+    del.textContent = '×';
+    del.setAttribute('aria-label', 'Remove exercise');
+    del.addEventListener('click', () => {
+      const list = load(ROUTINES_KEY);
+      const r = findRoutine(list, routineId);
+      if (!r) return;
+      r.exercises = (r.exercises || []).filter(e => e.id !== ex.id);
+      save(ROUTINES_KEY, list);
+      renderPlan();
+    });
+    li.appendChild(del);
+
+    return li;
+  }
+
+  function buildRoutineCard(routine) {
+    const card = document.createElement('div');
+    card.className = 'gm-card tr-routine';
+
+    // Header: name + delete
+    const head = document.createElement('div');
+    head.className = 'tr-routine-head';
+    const name = document.createElement('div');
+    name.className = 'tr-routine-name';
+    name.textContent = routine.name;
+    wireRoutineName(name, routine.id);
+    head.appendChild(name);
+
+    const delR = document.createElement('button');
+    delR.type = 'button';
+    delR.className = 'rv-icon-btn rv-delete';
+    delR.title = 'Delete routine';
+    delR.textContent = '🗑';
+    delR.setAttribute('aria-label', 'Delete routine ' + routine.name);
+    delR.addEventListener('click', () => {
+      if (!confirm('Delete the "' + routine.name + '" routine?')) return;
+      const list = load(ROUTINES_KEY).filter(r => r.id !== routine.id);
+      save(ROUTINES_KEY, list);
+      renderPlan();
+    });
+    head.appendChild(delR);
+    card.appendChild(head);
+
+    const exs = routine.exercises || [];
+    if (exs.length) {
+      const labels = document.createElement('div');
+      labels.className = 'tr-ex-labels';
+      labels.innerHTML = '<span class="l-name">Exercise</span><span class="l-set">Sets × Reps @ Wt</span>';
+      card.appendChild(labels);
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'tr-ex-list';
+    exs.forEach(ex => list.appendChild(buildExerciseRow(routine.id, ex)));
+    card.appendChild(list);
+
+    if (!exs.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.style.padding = '10px 0 4px';
+      empty.textContent = 'No exercises yet.';
+      card.appendChild(empty);
+    }
+
+    // Footer: add exercise
+    const foot = document.createElement('div');
+    foot.className = 'tr-routine-foot';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'gm-ghost';
+    addBtn.textContent = '+ Add exercise';
+    addBtn.addEventListener('click', () => {
+      const l = load(ROUTINES_KEY);
+      const r = findRoutine(l, routine.id);
+      if (!r) return;
+      r.exercises = r.exercises || [];
+      r.exercises.push({ id: uid(), name: '', sets: '', reps: '', weight: '' });
+      save(ROUTINES_KEY, l);
+      renderPlan();
+      // Focus the newly-added exercise's name field
+      const cards = document.querySelectorAll('#routineList .tr-routine');
+      const targetCard = Array.from(cards).find(c => c.dataset.rid === routine.id);
+      if (targetCard) {
+        const names = targetCard.querySelectorAll('.tr-ex-name');
+        if (names.length) names[names.length - 1].focus();
+      }
+    });
+    foot.appendChild(addBtn);
+    card.appendChild(foot);
+
+    card.dataset.rid = routine.id;
+    return card;
+  }
+
+  function renderPlan() {
+    const list = load(ROUTINES_KEY);
+    const wrap = $('routineList');
+    wrap.innerHTML = '';
+    $('planEmpty').hidden = list.length !== 0;
+    list.forEach(r => wrap.appendChild(buildRoutineCard(r)));
+    $('planCount').textContent = list.length;
+  }
+
+  function addRoutine() {
+    const nm = $('newRoutineName').value.trim();
+    if (!nm) { $('newRoutineName').focus(); return; }
+    const list = load(ROUTINES_KEY);
+    list.push({ id: uid(), name: nm, exercises: [] });
+    save(ROUTINES_KEY, list);
+    $('newRoutineName').value = '';
+    renderPlan();
+  }
+
+  // =========================================================
+  //  MODAL PLUMBING
+  // =========================================================
+  function openModal(title) {
+    $('modalTitle').textContent = title;
+    $('modalBg').classList.add('show');
+  }
+  function closeModal() {
+    $('modalBg').classList.remove('show');
+    $('modalBody').innerHTML = '';
+  }
+  $('modalClose').addEventListener('click', closeModal);
+  $('modalBg').addEventListener('click', (e) => { if (e.target === $('modalBg')) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('modalBg').classList.contains('show')) closeModal();
+  });
+
+  // Step 1 — choose template vs freeform
+  function openCheckModal() {
+    openModal('Check Workout');
+    const body = $('modalBody');
+    body.innerHTML = '';
+
+    const sub = document.createElement('p');
+    sub.className = 'modal-sub';
+    sub.textContent = 'Log from a template, or add a freeform entry?';
+    body.appendChild(sub);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'tr-choice';
+
+    const tplBtn = document.createElement('button');
+    tplBtn.type = 'button';
+    tplBtn.className = 'tr-choice-btn';
+    tplBtn.innerHTML = '<span class="tr-choice-ic">📋</span><span>' +
+      '<span class="tr-choice-tt">From a template</span>' +
+      '<span class="tr-choice-dd">Pick a saved routine and log what you actually did</span></span>';
+    tplBtn.addEventListener('click', openTemplatePicker);
+
+    const freeBtn = document.createElement('button');
+    freeBtn.type = 'button';
+    freeBtn.className = 'tr-choice-btn';
+    freeBtn.innerHTML = '<span class="tr-choice-ic">✏️</span><span>' +
+      '<span class="tr-choice-tt">Freeform entry</span>' +
+      '<span class="tr-choice-dd">Start from a blank slate, add exercises ad hoc</span></span>';
+    freeBtn.addEventListener('click', () => openLogBuilder(null));
+
+    wrap.appendChild(tplBtn);
+    wrap.appendChild(freeBtn);
+    body.appendChild(wrap);
+  }
+
+  // Step 2a — pick a routine template
+  function openTemplatePicker() {
+    openModal('Pick a Routine');
+    const body = $('modalBody');
+    body.innerHTML = '';
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'tr-back-link';
+    back.textContent = '‹ Back';
+    back.addEventListener('click', openCheckModal);
+    body.appendChild(back);
+
+    const routines = load(ROUTINES_KEY);
+    if (!routines.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No routines saved yet. Create one in the Training Plan tab first.';
+      body.appendChild(empty);
+      return;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'tr-tpl-list';
+    routines.forEach(r => {
+      const n = (r.exercises || []).length;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tr-tpl-item';
+      const nm = document.createElement('span'); nm.className = 'tr-tpl-nm'; nm.textContent = r.name;
+      const ct = document.createElement('span'); ct.className = 'tr-tpl-ct';
+      ct.textContent = n + (n === 1 ? ' exercise' : ' exercises');
+      btn.appendChild(nm); btn.appendChild(ct);
+      btn.addEventListener('click', () => openLogBuilder(r));
+      wrap.appendChild(btn);
+    });
+    body.appendChild(wrap);
+  }
+
+  // Step 2b/3 — the log builder. `routine` = a routine object (template) or null (freeform).
+  function openLogBuilder(routine) {
+    openModal(routine ? ('Log: ' + routine.name) : 'Freeform Workout');
+    const body = $('modalBody');
+    body.innerHTML = '';
+
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'tr-back-link';
+    back.textContent = '‹ Back';
+    back.addEventListener('click', openCheckModal);
+    body.appendChild(back);
+
+    const sub = document.createElement('p');
+    sub.className = 'modal-sub';
+    sub.textContent = routine
+      ? 'Pre-filled from your targets — edit each to what you actually performed.'
+      : 'Add each exercise you did.';
+    body.appendChild(sub);
+
+    // Date row
+    const dateRow = document.createElement('div');
+    dateRow.className = 'tr-form-row';
+    const dlabel = document.createElement('label');
+    dlabel.textContent = 'Date'; dlabel.setAttribute('for', 'logDate');
+    const dinput = document.createElement('input');
+    dinput.className = 'gm-input'; dinput.type = 'date'; dinput.id = 'logDate';
+    dinput.style.flex = '0 0 auto'; dinput.style.minWidth = '0'; dinput.style.width = '170px';
+    dinput.value = todayStr();
+    dateRow.appendChild(dlabel); dateRow.appendChild(dinput);
+    body.appendChild(dateRow);
+
+    // Exercise builder list
+    const ul = document.createElement('ul');
+    ul.className = 'tr-build-list';
+    ul.id = 'buildList';
+    body.appendChild(ul);
+
+    function addBuildRow(preset) {
+      const li = document.createElement('li');
+      li.className = 'tr-build-ex';
+
+      const name = document.createElement('input');
+      name.className = 'tr-ex-name'; name.type = 'text'; name.placeholder = 'Exercise';
+      name.value = (preset && preset.name) || '';
+
+      const metric = document.createElement('div');
+      metric.className = 'tr-metric';
+      function num(val, ph, cls) {
+        const i = document.createElement('input');
+        i.className = 'tr-num' + (cls ? ' ' + cls : '');
+        i.type = 'text'; i.inputMode = 'decimal'; i.placeholder = ph;
+        i.value = val || ''; i.setAttribute('aria-label', ph);
+        return i;
+      }
+      const sets = num(preset && preset.sets, 'sets');
+      const reps = num(preset && preset.reps, 'reps');
+      const weight = num(preset && preset.weight, 'kg', 'tr-num-w');
+      const x = document.createElement('span'); x.className = 'tr-metric-x'; x.textContent = '×';
+      const at = document.createElement('span'); at.className = 'tr-metric-at'; at.textContent = '@';
+      metric.append(sets, x, reps, at, weight);
+
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'rv-icon-btn rv-delete';
+      del.textContent = '×'; del.title = 'Remove'; del.setAttribute('aria-label', 'Remove row');
+      del.addEventListener('click', () => li.remove());
+
+      li.append(name, metric, del);
+      li._get = () => ({
+        name: name.value.trim(),
+        sets: sets.value.trim(),
+        reps: reps.value.trim(),
+        weight: weight.value.trim()
+      });
+      ul.appendChild(li);
+      return li;
+    }
+
+    if (routine && (routine.exercises || []).length) {
+      routine.exercises.forEach(ex => addBuildRow(ex));
+    } else {
+      addBuildRow(null);
+    }
+
+    // Add-exercise button
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'gm-ghost';
+    addBtn.textContent = '+ Add exercise';
+    addBtn.addEventListener('click', () => {
+      const li = addBuildRow(null);
+      const inp = li.querySelector('.tr-ex-name');
+      if (inp) inp.focus();
+    });
+    body.appendChild(addBtn);
+
+    // Footer: save / cancel
+    const foot = document.createElement('div');
+    foot.className = 'modal-foot';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'gm-ghost'; cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', closeModal);
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button'; saveBtn.className = 'gm-add'; saveBtn.textContent = 'Save workout';
+    saveBtn.addEventListener('click', () => {
+      const rows = Array.from(ul.querySelectorAll('.tr-build-ex'))
+        .map(li => li._get())
+        .filter(ex => ex.name); // drop blank rows
+      if (!rows.length) { alert('Add at least one exercise (with a name) to log.'); return; }
+      const entry = {
+        id: uid(),
+        date: dinput.value || todayStr(),
+        routineName: routine ? routine.name : null,
+        exercises: rows
+      };
+      const entries = load(ENTRIES_KEY);
+      entries.unshift(entry);
+      save(ENTRIES_KEY, entries);
+      closeModal();
+      renderLog();
+    });
+    foot.append(cancel, saveBtn);
+    body.appendChild(foot);
+  }
+
+  // =========================================================
+  //  WORKOUT LOG (history)
+  // =========================================================
+  function buildLogEntry(entry) {
+    const li = document.createElement('li');
+    li.className = 'tr-log-entry';
+
+    const summary = document.createElement('div');
+    summary.className = 'tr-log-summary';
+
+    const chev = document.createElement('span');
+    chev.className = 'tr-log-chev'; chev.textContent = '▶';
+
+    const main = document.createElement('div');
+    main.className = 'tr-log-main';
+    const nm = document.createElement('div');
+    nm.className = 'tr-log-name';
+    if (entry.routineName) {
+      nm.textContent = entry.routineName;
+    } else {
+      nm.textContent = 'Workout';
+      const tag = document.createElement('span');
+      tag.className = 'tr-freeform-tag'; tag.textContent = 'Freeform';
+      nm.appendChild(tag);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'tr-log-meta';
+    const n = (entry.exercises || []).length;
+    meta.textContent = formatDate(entry.date) + ' · ' + n + (n === 1 ? ' exercise' : ' exercises');
+    main.appendChild(nm); main.appendChild(meta);
+
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'rv-icon-btn rv-delete';
+    del.textContent = '×'; del.title = 'Delete entry'; del.setAttribute('aria-label', 'Delete entry');
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this logged workout?')) return;
+      save(ENTRIES_KEY, load(ENTRIES_KEY).filter(x => x.id !== entry.id));
+      renderLog();
+    });
+
+    summary.append(chev, main, del);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'tr-log-body';
+    bodyEl.hidden = true;
+
+    const table = document.createElement('table');
+    table.className = 'tr-log-table';
+    table.innerHTML =
+      '<thead><tr><th>Exercise</th><th class="num">Sets</th><th class="num">Reps</th><th class="num">Weight</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    (entry.exercises || []).forEach(ex => {
+      const tr = document.createElement('tr');
+      const dash = (v) => (v === '' || v == null) ? '—' : v;
+      const c1 = document.createElement('td'); c1.className = 'ex'; c1.textContent = ex.name || '—';
+      const c2 = document.createElement('td'); c2.className = 'num'; c2.textContent = dash(ex.sets);
+      const c3 = document.createElement('td'); c3.className = 'num'; c3.textContent = dash(ex.reps);
+      const c4 = document.createElement('td'); c4.className = 'num'; c4.textContent = dash(ex.weight);
+      tr.append(c1, c2, c3, c4);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    bodyEl.appendChild(table);
+
+    summary.addEventListener('click', () => {
+      const open = li.classList.toggle('open');
+      bodyEl.hidden = !open;
+    });
+
+    li.append(summary, bodyEl);
+    return li;
+  }
+
+  function renderLog() {
+    const entries = load(ENTRIES_KEY);
+    const listEl = $('logList');
+    listEl.innerHTML = '';
+    $('logEmpty').hidden = entries.length !== 0;
+    entries.forEach(e => listEl.appendChild(buildLogEntry(e)));
+    $('logCount').textContent = entries.length;
+  }
+
+  function renderAll() { renderPlan(); renderLog(); }
+
+  // =========================================================
+  //  WIRING
+  // =========================================================
+  $('addRoutineBtn').addEventListener('click', addRoutine);
+  $('newRoutineName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addRoutine(); }
+  });
+  $('checkWorkoutBtn').addEventListener('click', openCheckModal);
+
+  // Tabs
+  function switchTab(panel) {
+    const isPlan = panel === 'plan';
+    $('tabPlan').classList.toggle('active', isPlan);
+    $('tabLog').classList.toggle('active', !isPlan);
+    $('panelPlan').hidden = !isPlan;
+    $('panelLog').hidden = isPlan;
+  }
+  $('tabPlan').addEventListener('click', () => switchTab('plan'));
+  $('tabLog').addEventListener('click', () => switchTab('log'));
+
+  // Boot
+  renderAll();
+
+  // Cloud sync — two independent rows, same helper as every other module.
+  if (window.initCloudSync) {
+    window.initCloudSync({ appKey: 'training_plan', syncedKeys: [ROUTINES_KEY], onApplied: renderPlan });
+    window.initCloudSync({ appKey: 'workout_log',   syncedKeys: [ENTRIES_KEY],  onApplied: renderLog });
+  }
+  window.addEventListener('storage', renderAll);
+})();
+</script>
+</body>
+</html>
