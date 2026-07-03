@@ -775,6 +775,24 @@ body::after {
         <div class="gm-status" id="tomorrowStatus"></div>
       </div>
     </div>
+
+    <!-- BIWEEKLY — a list you manage; its items auto-merge into Today on the 1st & 15th -->
+    <div class="gm-card gm-card-tomorrow" id="gmCardBiweekly">
+      <div class="gm-header">
+        <div class="gm-header-left">
+          <div class="gm-eyebrow">Biweekly list</div>
+          <div class="gm-tomorrow-sub">Auto-added to Today on the 1st &amp; 15th, tagged “Biweekly”.</div>
+        </div>
+      </div>
+      <ul id="biweeklyList" class="goal-list gm-list"></ul>
+      <div id="biweeklyEmpty" class="empty-state">No biweekly items yet — add ones you want every 1st &amp; 15th.</div>
+      <div class="goal-input-wrap gm-input-wrap">
+        <input id="biweeklyInput" class="gm-input" type="text" placeholder="Add a biweekly item…" autocomplete="off">
+        <button type="button" id="biweeklyAddBtn"    class="gm-add">+ Add</button>
+        <button type="button" id="biweeklyPolishBtn" class="gm-polish">✨ Polish</button>
+        <div class="gm-status" id="biweeklyStatus"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ============================================================
@@ -1038,6 +1056,12 @@ body::after {
   function todayKey()    { return 'goals:' + getActiveDateString(); }
   function tomorrowKey() { return 'goals:' + getTomorrowDateString(); }
 
+  // Biweekly template list — a standalone list the user manages. Its items get
+  // merged into Today on the 1st & 15th. Kept OUTSIDE the 'goals:' prefix so it
+  // isn't swept up by rollover / streak / date iteration; synced via syncedKeys.
+  const BIWEEKLY_KEY = 'biweekly_list_v1';
+  const BIWEEKLY_FLAG_KEY = 'biweekly_last_merged_v1';
+
   function getGoals(key) {
     const g = storeGet(key);
     return Array.isArray(g) ? g : [];
@@ -1172,6 +1196,39 @@ body::after {
       storeDelete(k);
     });
     setGoals(todayK, today);
+  }
+
+  // ---------- biweekly merge (1st & 15th) ----------
+  // Returns the active date string ('YYYY-MM-DD') when today is the 1st or 15th,
+  // otherwise null. Uses the same 6 AM active-date as the goals list.
+  function biweeklyOccurrence() {
+    const ds = getActiveDateString();
+    const day = parseInt(ds.slice(8, 10), 10);
+    return (day === 1 || day === 15) ? ds : null;
+  }
+
+  function mergeBiweeklyIntoToday() {
+    const occ = biweeklyOccurrence();
+    if (!occ) return;
+    // Already merged this occurrence? A same-day reload (or a deleted item) must
+    // not re-inject. The flag is keyed to the occurrence date.
+    if (storeGet(BIWEEKLY_FLAG_KEY) === occ) return;
+
+    const template = getGoals(BIWEEKLY_KEY);
+    if (template.length === 0) return; // nothing to merge yet — try again next load
+
+    const todayK = todayKey();
+    const today = getGoals(todayK);
+    const existing = new Set(today.map(g => g.text));
+    template.forEach(t => {
+      if (!t.text || existing.has(t.text)) return;
+      const tags = Array.isArray(t.tags) ? t.tags.slice() : [];
+      if (!tags.some(x => lc(x) === 'biweekly')) tags.push('Biweekly');
+      today.push({ text: t.text, done: false, tags });
+      existing.add(t.text);
+    });
+    setGoals(todayK, today);
+    storeSet(BIWEEKLY_FLAG_KEY, occ);
   }
 
   // ---------- streak ----------
@@ -1554,19 +1611,18 @@ body::after {
       'Plan tomorrow — ' + formatDate(getTomorrowDateString());
   }
 
-  function renderListInto(goals, listEl, emptyEl, key, readOnly) {
+  function renderListInto(goals, listEl, emptyEl, key, readOnly, reload, ignoreFilter) {
     listEl.innerHTML = '';
-    const reload = () => (key === todayKey() ? loadToday() : loadTomorrow());
 
     // Keep each item's true storage index so edit/delete/drag stay correct
     // even when the tag filter hides some items.
     const entries = goals
       .map((g, idx) => ({ g, idx }))
-      .filter(e => matchesFilter(e.g));
+      .filter(e => ignoreFilter || matchesFilter(e.g));
 
     if (!emptyEl.dataset.default) emptyEl.dataset.default = emptyEl.textContent;
     emptyEl.style.display = entries.length === 0 ? 'block' : 'none';
-    emptyEl.textContent = (goals.length > 0 && activeTags.size > 0)
+    emptyEl.textContent = (!ignoreFilter && goals.length > 0 && activeTags.size > 0)
       ? 'No items match the selected tags.'
       : emptyEl.dataset.default;
 
@@ -1597,19 +1653,23 @@ body::after {
       listEl.appendChild(toggle);
     }
 
-    if (key === todayKey()) renderTodayHeader();
-    else                    renderTomorrowCount();
+    if (key === todayKey())         renderTodayHeader();
+    else if (key === tomorrowKey()) renderTomorrowCount();
   }
 
   function loadToday() {
     refreshTagUI();
     const goals = getGoals(todayKey());
-    renderListInto(goals, document.getElementById('goalList'), document.getElementById('emptyState'), todayKey(), false);
+    renderListInto(goals, document.getElementById('goalList'), document.getElementById('emptyState'), todayKey(), false, loadToday, false);
   }
   function loadTomorrow() {
     refreshTagUI();
     const goals = getGoals(tomorrowKey());
-    renderListInto(goals, document.getElementById('tomorrowList'), document.getElementById('tomorrowEmpty'), tomorrowKey(), true);
+    renderListInto(goals, document.getElementById('tomorrowList'), document.getElementById('tomorrowEmpty'), tomorrowKey(), true, loadTomorrow, false);
+  }
+  function loadBiweekly() {
+    const goals = getGoals(BIWEEKLY_KEY);
+    renderListInto(goals, document.getElementById('biweeklyList'), document.getElementById('biweeklyEmpty'), BIWEEKLY_KEY, false, loadBiweekly, true);
   }
 
   // ---------- Push remaining ----------
@@ -1718,6 +1778,14 @@ body::after {
     document.getElementById('tomorrowStatus'),
     loadTomorrow
   );
+  makeAddHandlers(
+    document.getElementById('biweeklyInput'),
+    document.getElementById('biweeklyAddBtn'),
+    document.getElementById('biweeklyPolishBtn'),
+    BIWEEKLY_KEY,
+    document.getElementById('biweeklyStatus'),
+    loadBiweekly
+  );
 
   // ---------- Tag filter: clear ----------
   (function () {
@@ -1731,8 +1799,10 @@ body::after {
   // ---------- Boot ----------
   rollover();
   processStreak();
+  mergeBiweeklyIntoToday();
   loadToday();
   loadTomorrow();
+  loadBiweekly();
   renderStreak();
   updateDayRing();
   setInterval(updateDayRing, 60 * 1000);
@@ -1740,7 +1810,7 @@ body::after {
 
   // Re-render when storage changes from another tab (or our bridged parent).
   window.addEventListener('storage', () => {
-    loadToday(); loadTomorrow(); renderStreak();
+    loadToday(); loadTomorrow(); loadBiweekly(); renderStreak();
   });
 })();
 </script>
@@ -1751,6 +1821,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initCloudSync({
     appKey: 'goals',
     syncedPrefixes: ['goals:'],
+    syncedKeys: ['biweekly_list_v1', 'biweekly_last_merged_v1'],
     onApplied: function () {
       window.dispatchEvent(new CustomEvent('goals-changed'));
       window.dispatchEvent(new Event('storage'));

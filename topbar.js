@@ -207,12 +207,6 @@ body.topbar-modal-open {
   <a href="training.html" class="topbar-finance-btn" id="topbarTraining" aria-label="Training Hub">
     <span class="topbar-finance-icon">🏋️</span>
   </a>
-  <a href="reading.html" class="topbar-finance-btn" id="topbarReading" aria-label="Reading Vault">
-    <span class="topbar-finance-icon">📚</span>
-  </a>
-  <a href="finance.html" class="topbar-finance-btn" id="topbarFinance" aria-label="Finance">
-    <span class="topbar-finance-icon">📊</span>
-  </a>
 </header>
 `;
 
