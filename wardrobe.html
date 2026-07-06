@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="lock.js"></script>
+<script src="/api/config"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<title>Wardrobe · Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sync.js" defer></script>
+<script src="topbar.js" defer></script>
+
+<style>
+/* ===== Shared design tokens (same as the rest of the dashboard) ===== */
+:root {
+  --text-primary: #FAFAFA;
+  --text-secondary: #B8B6B0;
+  --text-tertiary: #76746E;
+  --success: #6BE3A4;
+  --warning: #F2C063;
+  --danger:  #FF6B6B;
+  --accent:  #5EEAD4;                 /* Wardrobe's own accent (matches hub tile) */
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: #050506;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100vh; position: relative; overflow-x: hidden;
+  padding: max(28px, env(safe-area-inset-top)) 20px 60px;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background:
+    radial-gradient(circle at 82% 14%, rgba(224, 118, 88, 0.16), transparent 45%),
+    radial-gradient(circle at 18% 90%, rgba(180, 180, 200, 0.06), transparent 50%);
+  filter: blur(40px); pointer-events: none; z-index: -2;
+  animation: drift 36s ease-in-out infinite alternate;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.014) 1px, transparent 1px);
+  background-size: 3px 3px; pointer-events: none; z-index: -1;
+}
+@keyframes drift { 0%{transform:translate3d(0,0,0)} 100%{transform:translate3d(-22px,14px,0)} }
+
+.page { max-width: 1100px; margin: 0 auto; }
+.dash-title {
+  margin: 0 0 4px; font-size: 28px; font-weight: 700; letter-spacing: -0.025em;
+  background: linear-gradient(180deg, #FFFFFF 0%, #C7C4BC 120%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.dash-sub { font-size: 13px; color: var(--text-tertiary); margin: 0 0 18px; }
+@media (max-width: 480px) { .dash-title { font-size: 22px; } }
+
+/* ===== Toolbar: filter chips + add button ===== */
+.wd-toolbar {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.wd-filters {
+  display: flex; flex-wrap: wrap; gap: 7px; flex: 1; min-width: 0;
+}
+.wd-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 13px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+  color: var(--text-tertiary);
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-transform: capitalize;
+}
+.wd-chip:hover { color: var(--text-secondary); background: rgba(255,255,255,0.06); }
+.wd-chip.active {
+  color: #04201B;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #FFF), var(--accent));
+  border-color: transparent;
+}
+.wd-chip-count {
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(255,255,255,0.08); color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.wd-chip.active .wd-chip-count { background: rgba(4,32,27,0.18); color: #04201B; }
+
+.wd-add-btn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 18px; border: 0; border-radius: 12px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
+  color: #0A0A0B; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(0,0,0,0.35), 0 8px 22px rgba(0,0,0,0.25);
+  transition: transform 0.1s, filter 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.wd-add-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.wd-add-btn:active { transform: translateY(0); }
+.wd-add-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; filter: none; }
+
+/* Config warning (shown when Supabase isn't available) */
+.wd-warn {
+  display: none;
+  margin: 0 0 16px; padding: 12px 14px;
+  border: 1px solid rgba(242,192,99,0.3); border-radius: 12px;
+  background: rgba(242,192,99,0.08); color: var(--warning);
+  font-size: 12.5px; line-height: 1.5;
+}
+.wd-warn.show { display: block; }
+
+/* ===== Grid of items ===== */
+.wd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 14px;
+}
+.empty-state {
+  text-align: center; font-size: 13px; font-style: italic;
+  color: var(--text-tertiary); padding: 48px 20px;
+  grid-column: 1 / -1;
+}
+.wd-card {
+  position: relative; display: flex; flex-direction: column;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px; overflow: hidden;
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.wd-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.wd-photo-wrap {
+  position: relative; width: 100%; aspect-ratio: 3 / 4;
+  background: rgba(0,0,0,0.35);
+  cursor: pointer; overflow: hidden;
+}
+.wd-photo {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: opacity 0.18s ease;
+}
+.wd-photo-empty {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; opacity: 0.3;
+}
+/* photo indicator dots (only when 2 photos) */
+.wd-dots {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 5px; pointer-events: none;
+}
+.wd-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  box-shadow: 0 0 3px rgba(0,0,0,0.6);
+  transition: background 0.15s;
+}
+.wd-dot.on { background: rgba(255,255,255,0.95); }
+
+.wd-card-body { padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wd-card-meta { min-width: 0; }
+.wd-cat {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wd-date { font-size: 10.5px; color: var(--text-tertiary); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.wd-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.wd-icon-btn {
+  border: 0; background: transparent; color: var(--text-tertiary);
+  font-size: 15px; line-height: 1; cursor: pointer;
+  padding: 5px 6px; border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.wd-icon-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.wd-icon-btn.wd-del:hover { color: var(--danger); }
+
+/* inline delete confirm overlay on a card */
+.wd-confirm {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px; text-align: center;
+  background: rgba(6,6,8,0.82); backdrop-filter: blur(3px);
+}
+.wd-confirm-text { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+.wd-confirm-row { display: flex; gap: 8px; }
+.wd-btn-danger {
+  padding: 8px 15px; border: 0; border-radius: 10px; cursor: pointer;
+  background: var(--danger); color: #2A0808;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+}
+.wd-btn-ghost {
+  padding: 8px 15px; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.05); color: var(--text-primary);
+  font-family: inherit; font-size: 12px; font-weight: 600;
+}
+
+/* ===== Modal (add / edit) — reuses the shared modal class names so
+   topbar.js's mobile-fullscreen + scroll-lock apply automatically ===== */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 120; display: none;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.modal-bg.show { display: flex; }
+.modal {
+  width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+  background: #0e0e10; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px; padding: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.modal-title { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; }
+.modal-close { border: 0; background: transparent; color: var(--text-tertiary); font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.modal-close:hover { color: var(--text-primary); }
+
+.field { margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; display: block; }
+
+/* photo slots */
+.wd-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.wd-slot {
+  position: relative; aspect-ratio: 3 / 4;
+  border: 1.5px dashed rgba(255,255,255,0.16); border-radius: 14px;
+  background: rgba(0,0,0,0.28); overflow: hidden; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.wd-slot:hover { border-color: rgba(255,255,255,0.3); background: rgba(0,0,0,0.36); }
+.wd-slot.filled { border-style: solid; border-color: rgba(255,255,255,0.1); }
+.wd-slot img { width: 100%; height: 100%; object-fit: cover; }
+.wd-slot-placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; text-align: center; padding: 8px;
+}
+.wd-slot-placeholder .wd-slot-plus { font-size: 26px; line-height: 1; opacity: 0.7; }
+.wd-slot-clear {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 26px; height: 26px; border: 0; border-radius: 8px;
+  background: rgba(6,6,8,0.7); color: #FFF;
+  font-size: 16px; line-height: 1; cursor: pointer;
+  display: none; align-items: center; justify-content: center;
+}
+.wd-slot.filled .wd-slot-clear { display: flex; }
+/* Photo 1 is required — you can replace it (tap to re-pick) but not empty it. */
+#wdSlot0 .wd-slot-clear { display: none; }
+.wd-slot-tag {
+  position: absolute; bottom: 6px; left: 6px; z-index: 1;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 6px;
+  background: rgba(6,6,8,0.66); color: var(--text-secondary);
+}
+
+/* category select + add-new */
+.wd-cat-row { display: flex; gap: 8px; }
+.wd-select {
+  flex: 1; min-width: 0; padding: 11px 13px;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 11px;
+  background: rgba(0,0,0,0.3); color: var(--text-primary);
+  font-family: inherit; font-size: 14px; outline: none;
+  color-scheme: dark; text-transform: capitalize; transition: border-color 0.2s;
+}
+.wd-select:focus { border-color: rgba(255,255,255,0.28); }
+.wd-newcat-btn {
+  flex-shrink: 0; padding: 9px 14px; border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 11px; background: rgba(255,255,255,0.04); color: var(--text-primary);
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; white-space: nowrap;
+}
+.wd-newcat-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18); }
+.wd-newcat { display: none; margin-top: 8px; gap: 8px; }
+.wd-newcat.show { display: flex; }
+.wd-input {
+  flex: 1; min-width: 0; padding: 11px 13px;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 11px;
+  background: rgba(0,0,0,0.3); color: var(--text-primary);
+  font-family: inherit; font-size: 14px; outline: none; transition: border-color 0.2s;
+}
+.wd-input:focus { border-color: rgba(255,255,255,0.28); }
+
+.wd-save {
+  width: 100%; margin-top: 6px; padding: 13px; border: 0; border-radius: 12px;
+  background: linear-gradient(180deg,#FFFFFF,#E8E5DD); color: #0A0A0B;
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 8px 22px rgba(0,0,0,0.25);
+  transition: filter 0.15s, transform 0.1s;
+}
+.wd-save:hover { filter: brightness(1.05); }
+.wd-save:active { transform: translateY(1px); }
+.wd-save:disabled { opacity: 0.55; cursor: progress; }
+.wd-status { text-align: center; font-size: 12px; min-height: 16px; margin-top: 10px; color: var(--text-tertiary); }
+.wd-status.err { color: var(--danger); }
+
+@media (max-width: 480px) {
+  body { padding: max(20px, env(safe-area-inset-top)) 14px 50px; }
+  .wd-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .wd-add-btn { padding: 10px 15px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1 class="dash-title">Wardrobe</h1>
+  <p class="dash-sub">Your clothing catalog — two photos per item.</p>
+
+  <div class="wd-warn" id="wdWarn">
+    Cloud storage isn't configured for this session, so photos can't be uploaded.
+    Open the dashboard on its deployed URL (where Supabase is set up) to add items.
+  </div>
+
+  <div class="wd-toolbar">
+    <div class="wd-filters" id="wdFilters"></div>
+    <button class="wd-add-btn" id="wdAddBtn" type="button">＋ Add item</button>
+  </div>
+
+  <div class="wd-grid" id="wdGrid"></div>
+
+</div><!-- /.page -->
+
+<!-- ===== Add / Edit modal ===== -->
+<div class="modal-bg" id="wdModalBg">
+  <div class="modal" role="dialog" aria-label="Clothing item">
+    <div class="modal-head">
+      <span class="modal-title" id="wdModalTitle">Add item</span>
+      <button class="modal-close" id="wdModalClose" type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Photos</label>
+      <div class="wd-slots">
+        <div class="wd-slot" id="wdSlot0" data-slot="0">
+          <span class="wd-slot-tag">Photo 1</span>
+          <div class="wd-slot-placeholder"><span class="wd-slot-plus">＋</span><span>Required</span></div>
+          <button class="wd-slot-clear" type="button" data-slot="0" aria-label="Remove photo 1">×</button>
+        </div>
+        <div class="wd-slot" id="wdSlot1" data-slot="1">
+          <span class="wd-slot-tag">Photo 2</span>
+          <div class="wd-slot-placeholder"><span class="wd-slot-plus">＋</span><span>Optional</span></div>
+          <button class="wd-slot-clear" type="button" data-slot="1" aria-label="Remove photo 2">×</button>
+        </div>
+      </div>
+      <input type="file" id="wdFile0" accept="image/*" hidden>
+      <input type="file" id="wdFile1" accept="image/*" hidden>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Category</label>
+      <div class="wd-cat-row">
+        <select class="wd-select" id="wdCategory"></select>
+        <button class="wd-newcat-btn" id="wdNewCatBtn" type="button">＋ New</button>
+      </div>
+      <div class="wd-newcat" id="wdNewCatWrap">
+        <input class="wd-input" id="wdNewCatInput" type="text" placeholder="New category name…" autocomplete="off" maxlength="24">
+        <button class="wd-newcat-btn" id="wdNewCatAdd" type="button">Add</button>
+      </div>
+    </div>
+
+    <button class="wd-save" id="wdSave" type="button">Save item</button>
+    <div class="wd-status" id="wdStatus"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+
+  // -------- Supabase config (same project + public key as the rest of the app) --------
+  const SUPABASE_URL = (window.DASH_SUPABASE_URL) || 'https://awytpwgorebhjewlqlhs.supabase.co';
+  const SUPABASE_KEY = (window.DASH_SUPABASE_KEY) || 'sb_publishable_iyTy90Bi9Ct9ZMY0nu9hjA_N5BFmlFN';
+  const BUCKET = 'wardrobe-photos';
+
+  let _supa = null;
+  function supaClient() {
+    if (_supa) return _supa;
+    if (!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
+    if (SUPABASE_URL.indexOf('PASTE-') === 0 || SUPABASE_KEY.indexOf('PASTE-') === 0) return null;
+    try { _supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) { return null; }
+    return _supa;
+  }
+  function storageReady() { return !!supaClient(); }
+
+  // ===================== data model =====================
+  // localStorage key 'wardrobe_items' holds:
+  //   { items: [ { id, category, photo_paths: [p1, p2], added_date } ],
+  //     categories: ['t-shirt', ...] }
+  // The sync helper mirrors this key into the app_state row 'wardrobe'.
+  const STORE_KEY = 'wardrobe_items';
+  const DEFAULT_CATEGORIES = ['t-shirt', 'trousers', 'shoes', 'trainers'];
+
+  function loadStore() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) {}
+    if (!s || typeof s !== 'object') s = {};
+    if (!Array.isArray(s.items)) s.items = [];
+    if (!Array.isArray(s.categories) || !s.categories.length) s.categories = DEFAULT_CATEGORIES.slice();
+    return s;
+  }
+  function saveStore(s) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+  function formatDate(s) {
+    if (!s) return '';
+    const p = String(s).split('-').map(Number);
+    if (p.length !== 3 || !p[0]) return s;
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][p[1] - 1];
+    return mo + ' ' + p[2] + ', ' + p[0];
+  }
+
+  let store = loadStore();
+  let activeFilter = 'all';
+
+  // ===================== image compression =====================
+  // Decode → scale so the longest side is 800px (never upscale) → JPEG @0.72.
+  const MAX_SIDE = 800;
+  const JPEG_QUALITY = 0.72;
+
+  async function decodeImage(file) {
+    if ('createImageBitmap' in window) {
+      try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+      catch (e) { /* Safari fallback below */ }
+    }
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+      img.src = url;
+    });
+  }
+  async function compressImage(file) {
+    const bmp = await decodeImage(file);
+    const w0 = bmp.width, h0 = bmp.height;
+    const scale = Math.min(1, MAX_SIDE / Math.max(w0, h0));
+    const w = Math.max(1, Math.round(w0 * scale));
+    const h = Math.max(1, Math.round(h0 * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY));
+    if (!blob) throw new Error('Image processing failed');
+    return blob;
+  }
+
+  // ===================== storage ops =====================
+  async function uploadPhoto(itemId, slot, file) {
+    const s = supaClient();
+    if (!s) throw new Error('Storage unavailable');
+    const blob = await compressImage(file);
+    const path = 'items/' + itemId + '_' + slot + '_' + uid() + '.jpg';
+    const { error } = await s.storage.from(BUCKET).upload(path, blob, {
+      contentType: 'image/jpeg', cacheControl: '3600', upsert: false,
+    });
+    if (error) throw error;
+    return path;
+  }
+  async function deletePhotos(paths) {
+    const s = supaClient();
+    const list = (paths || []).filter(Boolean);
+    if (!s || !list.length) return;
+    try { await s.storage.from(BUCKET).remove(list); } catch (e) { /* best effort */ }
+  }
+  function publicUrl(path) {
+    const s = supaClient();
+    if (!s || !path) return '';
+    try { const { data } = s.storage.from(BUCKET).getPublicUrl(path); return (data && data.publicUrl) || ''; }
+    catch (e) { return ''; }
+  }
+
+  // ===================== filters =====================
+  function renderFilters() {
+    const wrap = $('wdFilters');
+    wrap.innerHTML = '';
+    const counts = { all: store.items.length };
+    store.categories.forEach(c => { counts[c] = 0; });
+    store.items.forEach(it => { if (counts[it.category] == null) counts[it.category] = 0; counts[it.category]++; });
+
+    // 'All' + every known category (defaults, customs, and any orphaned category on an item).
+    const cats = ['all'];
+    store.categories.forEach(c => { if (cats.indexOf(c) === -1) cats.push(c); });
+    store.items.forEach(it => { if (it.category && cats.indexOf(it.category) === -1) cats.push(it.category); });
+
+    // if the active filter no longer exists, fall back to 'all'
+    if (activeFilter !== 'all' && cats.indexOf(activeFilter) === -1) activeFilter = 'all';
+
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'wd-chip' + (cat === activeFilter ? ' active' : '');
+      const label = document.createElement('span');
+      label.textContent = cat === 'all' ? 'All' : cat;
+      btn.appendChild(label);
+      const cnt = document.createElement('span');
+      cnt.className = 'wd-chip-count';
+      cnt.textContent = counts[cat] || 0;
+      btn.appendChild(cnt);
+      btn.addEventListener('click', () => { activeFilter = cat; render(); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  // ===================== grid =====================
+  function renderGrid() {
+    const grid = $('wdGrid');
+    grid.innerHTML = '';
+    const items = store.items.filter(it => activeFilter === 'all' || it.category === activeFilter);
+
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = store.items.length
+        ? 'Nothing in this category yet.'
+        : 'Your wardrobe is empty — tap “＋ Add item” to catalog your first piece.';
+      grid.appendChild(empty);
+      return;
+    }
+
+    items.forEach(it => grid.appendChild(buildCard(it)));
+  }
+
+  function buildCard(item) {
+    const card = document.createElement('div');
+    card.className = 'wd-card';
+
+    const paths = (item.photo_paths || []).filter(Boolean);
+
+    // photo area (tap to toggle between the item's photos)
+    const wrap = document.createElement('div');
+    wrap.className = 'wd-photo-wrap';
+    if (paths.length) {
+      let idx = 0;
+      const img = document.createElement('img');
+      img.className = 'wd-photo';
+      img.loading = 'lazy';
+      img.alt = item.category || 'Clothing item';
+      img.src = publicUrl(paths[0]);
+      img.addEventListener('error', () => { wrap.classList.add('broken'); });
+      wrap.appendChild(img);
+
+      if (paths.length > 1) {
+        const dots = document.createElement('div');
+        dots.className = 'wd-dots';
+        const dotEls = paths.map((_, i) => {
+          const d = document.createElement('span');
+          d.className = 'wd-dot' + (i === 0 ? ' on' : '');
+          dots.appendChild(d);
+          return d;
+        });
+        wrap.appendChild(dots);
+        wrap.addEventListener('click', () => {
+          idx = (idx + 1) % paths.length;
+          img.src = publicUrl(paths[idx]);
+          dotEls.forEach((d, i) => d.classList.toggle('on', i === idx));
+        });
+        wrap.title = 'Tap to see the other photo';
+      }
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'wd-photo-empty';
+      ph.textContent = '👕';
+      wrap.appendChild(ph);
+    }
+    card.appendChild(wrap);
+
+    // body: category + date + actions
+    const body = document.createElement('div');
+    body.className = 'wd-card-body';
+
+    const meta = document.createElement('div');
+    meta.className = 'wd-card-meta';
+    const cat = document.createElement('div');
+    cat.className = 'wd-cat';
+    cat.textContent = item.category || 'Uncategorized';
+    meta.appendChild(cat);
+    if (item.added_date) {
+      const dt = document.createElement('div');
+      dt.className = 'wd-date';
+      dt.textContent = formatDate(item.added_date);
+      meta.appendChild(dt);
+    }
+    body.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'wd-actions';
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'wd-icon-btn';
+    editBtn.title = 'Edit';
+    editBtn.setAttribute('aria-label', 'Edit item');
+    editBtn.textContent = '✎';
+    editBtn.addEventListener('click', () => openEdit(item.id));
+    actions.appendChild(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'wd-icon-btn wd-del';
+    delBtn.title = 'Delete';
+    delBtn.setAttribute('aria-label', 'Delete item');
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', () => showDeleteConfirm(card, item.id));
+    actions.appendChild(delBtn);
+
+    body.appendChild(actions);
+    card.appendChild(body);
+    return card;
+  }
+
+  // inline delete confirm over the card
+  function showDeleteConfirm(card, id) {
+    if (card.querySelector('.wd-confirm')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'wd-confirm';
+    const text = document.createElement('div');
+    text.className = 'wd-confirm-text';
+    text.textContent = 'Delete this item and its photos?';
+    const row = document.createElement('div');
+    row.className = 'wd-confirm-row';
+    const yes = document.createElement('button');
+    yes.type = 'button'; yes.className = 'wd-btn-danger'; yes.textContent = 'Delete';
+    const no = document.createElement('button');
+    no.type = 'button'; no.className = 'wd-btn-ghost'; no.textContent = 'Cancel';
+    yes.addEventListener('click', async () => {
+      yes.disabled = true; no.disabled = true; yes.textContent = 'Deleting…';
+      await deleteItem(id);
+    });
+    no.addEventListener('click', () => overlay.remove());
+    row.appendChild(yes); row.appendChild(no);
+    overlay.appendChild(text); overlay.appendChild(row);
+    card.appendChild(overlay);
+  }
+
+  async function deleteItem(id) {
+    const item = store.items.find(it => it.id === id);
+    if (!item) { render(); return; }
+    // remove the files from Storage first so nothing is orphaned in the bucket
+    await deletePhotos(item.photo_paths || []);
+    store.items = store.items.filter(it => it.id !== id);
+    saveStore(store);
+    render();
+  }
+
+  // ===================== add / edit modal =====================
+  // Per-slot working state: existing path (edit), a freshly picked File, and a
+  // preview object-URL we must revoke on close.
+  let editingId = null;
+  const slots = [newSlot(), newSlot()];
+  function newSlot() { return { existingPath: null, file: null, previewUrl: null }; }
+
+  function resetSlots() {
+    slots.forEach(freeSlot);
+    slots[0] = newSlot();
+    slots[1] = newSlot();
+  }
+  function freeSlot(s) {
+    if (s && s.previewUrl) { try { URL.revokeObjectURL(s.previewUrl); } catch (e) {} s.previewUrl = null; }
+  }
+
+  function renderCategoryOptions(selected) {
+    const sel = $('wdCategory');
+    sel.innerHTML = '';
+    store.categories.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      sel.appendChild(o);
+    });
+    if (selected && store.categories.indexOf(selected) === -1) {
+      const o = document.createElement('option');
+      o.value = selected; o.textContent = selected;
+      sel.appendChild(o);
+    }
+    sel.value = selected || store.categories[0] || '';
+  }
+
+  function renderSlot(i) {
+    const el = $('wdSlot' + i);
+    const s = slots[i];
+    const placeholder = el.querySelector('.wd-slot-placeholder');
+    let img = el.querySelector('img');
+    const src = s.previewUrl || (s.existingPath ? publicUrl(s.existingPath) : '');
+    if (src) {
+      if (!img) { img = document.createElement('img'); el.insertBefore(img, el.querySelector('.wd-slot-clear')); }
+      img.src = src;
+      el.classList.add('filled');
+      if (placeholder) placeholder.style.display = 'none';
+    } else {
+      if (img) img.remove();
+      el.classList.remove('filled');
+      if (placeholder) placeholder.style.display = '';
+    }
+  }
+  function renderSlots() { renderSlot(0); renderSlot(1); }
+
+  function onPickFile(i, file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { setStatus('Please choose an image file.', true); return; }
+    const s = slots[i];
+    freeSlot(s);
+    s.file = file;
+    s.previewUrl = URL.createObjectURL(file);
+    setStatus('');
+    renderSlot(i);
+  }
+  function clearSlot(i) {
+    const s = slots[i];
+    freeSlot(s);
+    s.file = null;
+    s.existingPath = null;      // marks it for removal on save if it had one
+    $('wdFile' + i).value = '';
+    renderSlot(i);
+  }
+
+  function setStatus(msg, isErr) {
+    const el = $('wdStatus');
+    el.textContent = msg || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  function openAdd() {
+    editingId = null;
+    resetSlots();
+    $('wdModalTitle').textContent = 'Add item';
+    $('wdSave').textContent = 'Save item';
+    renderCategoryOptions(null);
+    hideNewCat();
+    renderSlots();
+    setStatus(storageReady() ? '' : 'Cloud storage unavailable — cannot upload right now.', !storageReady());
+    $('wdModalBg').classList.add('show');
+  }
+  function openEdit(id) {
+    const item = store.items.find(it => it.id === id);
+    if (!item) return;
+    editingId = id;
+    resetSlots();
+    const paths = (item.photo_paths || []).filter(Boolean);
+    slots[0].existingPath = paths[0] || null;
+    slots[1].existingPath = paths[1] || null;
+    $('wdModalTitle').textContent = 'Edit item';
+    $('wdSave').textContent = 'Save changes';
+    renderCategoryOptions(item.category);
+    hideNewCat();
+    renderSlots();
+    setStatus('');
+    $('wdModalBg').classList.add('show');
+  }
+  function closeModal() {
+    $('wdModalBg').classList.remove('show');
+    resetSlots();
+    $('wdFile0').value = ''; $('wdFile1').value = '';
+    hideNewCat();
+  }
+
+  // add-a-category (persists immediately so it syncs across devices)
+  function showNewCat() { $('wdNewCatWrap').classList.add('show'); $('wdNewCatInput').focus(); }
+  function hideNewCat() { $('wdNewCatWrap').classList.remove('show'); $('wdNewCatInput').value = ''; }
+  function addCategory() {
+    const raw = $('wdNewCatInput').value.trim().toLowerCase();
+    if (!raw) { $('wdNewCatInput').focus(); return; }
+    if (store.categories.indexOf(raw) === -1) {
+      store.categories.push(raw);
+      saveStore(store);
+    }
+    renderCategoryOptions(raw);
+    hideNewCat();
+    renderFilters();
+  }
+
+  async function submit() {
+    if (!storageReady()) { setStatus('Cloud storage unavailable — cannot save right now.', true); return; }
+
+    const category = $('wdCategory').value;
+    if (!category) { setStatus('Pick a category first.', true); return; }
+
+    // slot 0 is required: it must end up with either a new file or an existing photo
+    const hasSlot0 = !!(slots[0].file || slots[0].existingPath);
+    if (!hasSlot0) { setStatus('Photo 1 is required.', true); return; }
+
+    const saveBtn = $('wdSave');
+    saveBtn.disabled = true;
+    setStatus('Uploading…');
+
+    const id = editingId || uid();
+    const toDelete = [];    // superseded/removed files to clean up after a successful save
+    const uploadedNow = []; // files uploaded in THIS attempt (rolled back if the attempt fails)
+
+    try {
+      const finalPaths = [];
+      for (let i = 0; i < slots.length; i++) {
+        const s = slots[i];
+        if (s.file) {
+          const newPath = await uploadPhoto(id, i, s.file);
+          uploadedNow.push(newPath);
+          if (s.existingPath) toDelete.push(s.existingPath);  // replaced → delete old
+          finalPaths[i] = newPath;
+        } else if (s.existingPath) {
+          finalPaths[i] = s.existingPath;                      // unchanged
+        } else {
+          finalPaths[i] = null;                                // empty / cleared
+        }
+      }
+      // If an existing photo was cleared (no file, no existingPath) but the item
+      // previously had one there, delete that old file too.
+      if (editingId) {
+        const prev = store.items.find(it => it.id === editingId);
+        const prevPaths = (prev && prev.photo_paths) || [];
+        for (let i = 0; i < prevPaths.length; i++) {
+          if (prevPaths[i] && finalPaths[i] !== prevPaths[i] && toDelete.indexOf(prevPaths[i]) === -1) {
+            toDelete.push(prevPaths[i]);
+          }
+        }
+      }
+
+      const photo_paths = finalPaths.filter(Boolean);
+
+      if (editingId) {
+        const it = store.items.find(x => x.id === editingId);
+        if (it) { it.category = category; it.photo_paths = photo_paths; }
+      } else {
+        store.items.unshift({ id, category, photo_paths, added_date: todayStr() });
+      }
+      saveStore(store);
+
+      // clean up superseded files (best effort, after the reference is safely saved)
+      if (toDelete.length) deletePhotos(toDelete);
+
+      closeModal();
+      render();
+    } catch (e) {
+      // roll back the files we managed to upload in this failed attempt so the
+      // bucket doesn't accumulate orphans from a half-completed save.
+      if (uploadedNow.length) deletePhotos(uploadedNow);
+      setStatus('Upload failed: ' + ((e && e.message) || 'unknown error') + '. Please try again.', true);
+      saveBtn.disabled = false;
+      return;
+    }
+    saveBtn.disabled = false;
+  }
+
+  // ===================== render + boot =====================
+  function render() {
+    store = loadStore();
+    renderFilters();
+    renderGrid();
+  }
+
+  function boot() {
+    if (!storageReady()) $('wdWarn').classList.add('show');
+
+    $('wdAddBtn').addEventListener('click', openAdd);
+    $('wdModalClose').addEventListener('click', closeModal);
+    $('wdModalBg').addEventListener('click', (e) => { if (e.target === $('wdModalBg')) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('wdModalBg').classList.contains('show')) closeModal(); });
+
+    // photo slots
+    [0, 1].forEach(i => {
+      $('wdSlot' + i).addEventListener('click', (e) => {
+        if (e.target.classList.contains('wd-slot-clear')) return; // handled below
+        $('wdFile' + i).click();
+      });
+      $('wdFile' + i).addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        onPickFile(i, f);
+      });
+    });
+    document.querySelectorAll('.wd-slot-clear').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); clearSlot(parseInt(btn.dataset.slot, 10)); });
+    });
+
+    // category add-new
+    $('wdNewCatBtn').addEventListener('click', () => {
+      const w = $('wdNewCatWrap');
+      if (w.classList.contains('show')) hideNewCat(); else showNewCat();
+    });
+    $('wdNewCatAdd').addEventListener('click', addCategory);
+    $('wdNewCatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addCategory(); }
+      else if (e.key === 'Escape') { e.preventDefault(); hideNewCat(); }
+    });
+
+    $('wdSave').addEventListener('click', submit);
+
+    render();
+
+    // ---------- cloud sync ----------
+    if (window.initCloudSync) {
+      window.initCloudSync({
+        appKey: 'wardrobe',
+        syncedKeys: [STORE_KEY],
+        onApplied: render,
+      });
+    }
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === STORE_KEY) render(); });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
