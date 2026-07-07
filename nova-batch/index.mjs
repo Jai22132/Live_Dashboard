@@ -42,7 +42,12 @@ import {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const CONFIG = {
   supabaseUrl: process.env.SUPABASE_URL || 'https://awytpwgorebhjewlqlhs.supabase.co',
-  supabaseKey: process.env.SUPABASE_ANON_KEY || 'sb_publishable_iyTy90Bi9Ct9ZMY0nu9hjA_N5BFmlFN',
+  // Prefer the service-role (secret) key: it bypasses RLS, which is required
+  // once app_state's policies demand the `authenticated` role — this script
+  // runs headless with no user session. This machine-local env var never
+  // ships anywhere; the anon-key fallback only works before RLS tightening.
+  supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY || 'sb_publishable_iyTy90Bi9Ct9ZMY0nu9hjA_N5BFmlFN',
   ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
   visionModel: process.env.NOVA_VISION_MODEL || 'qwen2.5vl:7b',
   textModel: process.env.NOVA_TEXT_MODEL || 'qwen2.5:14b',

@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="lock.js"></script>
 <script src="/api/config"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,6 +8,7 @@
 <title>Wardrobe · Dashboard</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="auth.js"></script>
 <script src="sync.js" defer></script>
 <script src="topbar.js" defer></script>
 
@@ -391,6 +391,10 @@ body::after {
     if (_supa) return _supa;
     if (!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
     if (SUPABASE_URL.indexOf('PASTE-') === 0 || SUPABASE_KEY.indexOf('PASTE-') === 0) return null;
+    // Reuse the shared authenticated client from auth.js when present so
+    // storage uploads/deletes carry the user's JWT (required once the
+    // bucket policies are tightened to the `authenticated` role).
+    if (window.DashAuth && window.DashAuth.client) { _supa = window.DashAuth.client; return _supa; }
     try { _supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) { return null; }
     return _supa;
   }

@@ -16,7 +16,11 @@ export const GOOGLE_TOKENS_KEY = 'google_calendar_tokens';
 
 function supabaseConfig() {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+  // Prefer the service-role (secret) key: it bypasses RLS, which is required
+  // once app_state's policies demand the `authenticated` role — server code
+  // has no user session. Falls back to the anon key so nothing breaks before
+  // SUPABASE_SERVICE_ROLE_KEY is added to the Vercel env.
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error('Supabase env vars are not configured');
   return { url, key };
 }

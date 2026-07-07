@@ -117,11 +117,13 @@
       const json = JSON.stringify(state);
       if (json === lastSyncedJson) return;
       try {
+        // Unload handlers can't await, so use the cached access token from
+        // auth.js; the anon key fallback only matters before RLS tightening.
         fetch(SUPABASE_URL + '/rest/v1/app_state?on_conflict=key', {
           method: 'POST',
           headers: {
             'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
+            'Authorization': 'Bearer ' + ((window.DashAuth && window.DashAuth.getAccessToken()) || SUPABASE_KEY),
             'Content-Type': 'application/json',
             'Prefer': 'resolution=merge-duplicates',
           },
@@ -133,7 +135,11 @@
     }
 
     (async function init() {
-      supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      // Reuse the shared authenticated client from auth.js when present so
+      // reads, writes and the realtime channel all carry the user's JWT
+      // (required once RLS is tightened to the `authenticated` role).
+      supa = (window.DashAuth && window.DashAuth.client) ||
+        window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       try {
         const { data, error } = await supa
           .from('app_state').select('data').eq('key', appKey).maybeSingle();

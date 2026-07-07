@@ -46,6 +46,7 @@ gracefully, so it's safe to run before the wardrobe or training modules have dat
 | Variable | Default |
 |---|---|
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | The project URL/key hardcoded in `sync.js` |
+| `SUPABASE_SERVICE_ROLE_KEY` | unset — **required once RLS requires sign-in** (the anon key can no longer read/write `app_state`); set it in the Task Scheduler environment, never commit it |
 | `OLLAMA_URL` | `http://localhost:11434` |
 | `NOVA_VISION_MODEL` | `qwen2.5vl:7b` |
 | `NOVA_TEXT_MODEL` | `qwen2.5:14b` |

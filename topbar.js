@@ -95,6 +95,7 @@
   filter: grayscale(100%) brightness(1.4);
   opacity: 0.85;
 }
+button.topbar-finance-btn { cursor: pointer; padding: 0; font: inherit; }
 
 /* Bottom tab bar — Instagram-style */
 .bottombar {
@@ -207,6 +208,9 @@ body.topbar-modal-open {
   <a href="training.html" class="topbar-finance-btn" id="topbarTraining" aria-label="Training Hub">
     <span class="topbar-finance-icon">🏋️</span>
   </a>
+  <button class="topbar-finance-btn" id="topbarLogout" aria-label="Log out" title="Log out" type="button">
+    <span class="topbar-finance-icon">⏻</span>
+  </button>
 </header>
 `;
 
@@ -384,7 +388,10 @@ body.topbar-modal-open {
     if (TOPBAR_SUPABASE_URL.indexOf('PASTE-') === 0) return;
 
     try {
-      const supa = window.supabase.createClient(TOPBAR_SUPABASE_URL, TOPBAR_SUPABASE_KEY);
+      // Reuse the shared authenticated client from auth.js when present so
+      // the write carries the user's JWT (required once RLS is tightened).
+      const supa = (window.DashAuth && window.DashAuth.client) ||
+        window.supabase.createClient(TOPBAR_SUPABASE_URL, TOPBAR_SUPABASE_KEY);
       const { data } = await supa
         .from('app_state').select('data').eq('key', 'health').maybeSingle();
       const current = (data && data.data) || {};
@@ -467,6 +474,16 @@ body.topbar-modal-open {
     injectStyleAndHTML();
     const btn = document.getElementById('topbarWaterAdd');
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); addWater(); });
+    const logoutBtn = document.getElementById('topbarLogout');
+    if (logoutBtn) {
+      if (window.DashAuth) {
+        logoutBtn.addEventListener('click', () => {
+          if (confirm('Log out of the dashboard?')) window.DashAuth.signOut();
+        });
+      } else {
+        logoutBtn.style.display = 'none'; // page not behind the auth gate
+      }
+    }
     render();
     lockGestures();
     startModalLock();
