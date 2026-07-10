@@ -306,6 +306,133 @@ body::after {
 .wd-status { text-align: center; font-size: 12px; min-height: 16px; margin-top: 10px; color: var(--text-tertiary); }
 .wd-status.err { color: var(--danger); }
 
+/* ===== Weather strip ===== */
+.wd-weather { margin: 0 0 16px; }
+.wd-weather-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.wd-weather-strip::-webkit-scrollbar { display: none; }
+.wd-hour {
+  flex: 0 0 auto; min-width: 60px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 10px 11px; border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.035);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.wd-hour.now {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, rgba(255,255,255,0.035));
+}
+.wd-hour-time { font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; color: var(--text-tertiary); text-transform: uppercase; }
+.wd-hour.now .wd-hour-time { color: var(--accent); }
+.wd-hour-icon { font-size: 19px; line-height: 1; }
+.wd-hour-temp { font-size: 14px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.wd-hour-pop {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 10px; font-weight: 600; color: #7DD3FC; font-variant-numeric: tabular-nums;
+  min-height: 12px;
+}
+.wd-hour-pop.dry { color: var(--text-tertiary); opacity: 0.45; }
+.wd-weather-msg {
+  padding: 11px 14px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03);
+  color: var(--text-tertiary); font-size: 12.5px; line-height: 1.5;
+}
+.wd-weather-loading { color: var(--text-tertiary); font-size: 12.5px; padding: 4px 2px; }
+
+/* ===== Items / Outfits tabs ===== */
+.wd-tabs {
+  display: inline-flex; gap: 4px; margin: 0 0 18px;
+  padding: 4px; border-radius: 13px;
+  border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.03);
+}
+.wd-tab {
+  border: 0; border-radius: 9px; cursor: pointer;
+  padding: 8px 18px; font-family: inherit; font-size: 13px; font-weight: 700;
+  color: var(--text-tertiary); background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, background 0.15s;
+}
+.wd-tab:hover { color: var(--text-secondary); }
+.wd-tab.active {
+  color: #04201B;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #FFF), var(--accent));
+}
+
+/* notes on the item card */
+.wd-notes {
+  font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* notes textarea in the modal */
+.wd-textarea {
+  width: 100%; min-height: 66px; resize: vertical;
+  padding: 11px 13px; border: 1px solid rgba(255,255,255,0.08); border-radius: 11px;
+  background: rgba(0,0,0,0.3); color: var(--text-primary);
+  font-family: inherit; font-size: 14px; line-height: 1.4; outline: none; transition: border-color 0.2s;
+}
+.wd-textarea:focus { border-color: rgba(255,255,255,0.28); }
+
+/* ===== Outfit cards ===== */
+.wd-outfit-collage {
+  position: relative; width: 100%; aspect-ratio: 3 / 4;
+  display: grid; gap: 2px; background: rgba(0,0,0,0.35);
+}
+.wd-outfit-collage.n1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.wd-outfit-collage.n2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.wd-outfit-collage.n3, .wd-outfit-collage.n4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.wd-outfit-collage.n3 .wd-collage-cell:first-child { grid-row: span 2; }
+.wd-collage-cell {
+  position: relative; overflow: hidden; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+}
+.wd-collage-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wd-collage-cell .wd-collage-ph { font-size: 24px; opacity: 0.3; }
+.wd-collage-more {
+  position: absolute; right: 6px; bottom: 6px; z-index: 1;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(6,6,8,0.72); color: var(--text-primary);
+  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.wd-outfit-empty {
+  width: 100%; aspect-ratio: 3 / 4; display: flex; align-items: center; justify-content: center;
+  font-size: 30px; opacity: 0.3;
+}
+.wd-outfit-name { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== Outfit item picker (in modal) ===== */
+.wd-pick-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 9px; max-height: 46vh; overflow-y: auto; padding: 2px;
+}
+.wd-pick {
+  position: relative; border-radius: 11px; overflow: hidden; cursor: pointer;
+  border: 2px solid transparent; background: rgba(0,0,0,0.3);
+  -webkit-tap-highlight-color: transparent; transition: border-color 0.15s;
+}
+.wd-pick-photo { width: 100%; aspect-ratio: 3 / 4; }
+.wd-pick-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wd-pick-photo .wd-collage-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 24px; opacity: 0.3; }
+.wd-pick-cat {
+  font-size: 10px; font-weight: 600; color: var(--text-secondary);
+  padding: 5px 6px; text-transform: capitalize;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+}
+.wd-pick.sel { border-color: var(--accent); }
+.wd-pick-check {
+  position: absolute; top: 5px; right: 5px; z-index: 1;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center;
+  background: var(--accent); color: #04201B; font-size: 13px; font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+.wd-pick.sel .wd-pick-check { display: flex; }
+.wd-pick-empty { grid-column: 1 / -1; text-align: center; font-size: 12.5px; font-style: italic; color: var(--text-tertiary); padding: 24px 12px; }
+
 @media (max-width: 480px) {
   body { padding: max(20px, env(safe-area-inset-top)) 14px 50px; }
   .wd-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
@@ -319,17 +446,37 @@ body::after {
   <h1 class="dash-title">Wardrobe</h1>
   <p class="dash-sub">Your clothing catalog — two photos per item.</p>
 
+  <!-- Weather forecast (client-side, geolocation + Open-Meteo) -->
+  <div class="wd-weather" id="wdWeather"></div>
+
+  <!-- Items / Outfits tabs -->
+  <div class="wd-tabs" role="tablist" aria-label="Wardrobe views">
+    <button class="wd-tab active" id="wdTabItems" data-tab="items" type="button" role="tab" aria-selected="true">Items</button>
+    <button class="wd-tab" id="wdTabOutfits" data-tab="outfits" type="button" role="tab" aria-selected="false">Outfits</button>
+  </div>
+
   <div class="wd-warn" id="wdWarn">
     Cloud storage isn't configured for this session, so photos can't be uploaded.
     Open the dashboard on its deployed URL (where Supabase is set up) to add items.
   </div>
 
-  <div class="wd-toolbar">
-    <div class="wd-filters" id="wdFilters"></div>
-    <button class="wd-add-btn" id="wdAddBtn" type="button">＋ Add item</button>
+  <!-- ===== Items view ===== -->
+  <div id="wdItemsView">
+    <div class="wd-toolbar">
+      <div class="wd-filters" id="wdFilters"></div>
+      <button class="wd-add-btn" id="wdAddBtn" type="button">＋ Add item</button>
+    </div>
+    <div class="wd-grid" id="wdGrid"></div>
   </div>
 
-  <div class="wd-grid" id="wdGrid"></div>
+  <!-- ===== Outfits view ===== -->
+  <div id="wdOutfitsView" style="display:none">
+    <div class="wd-toolbar">
+      <div class="wd-filters" style="flex:1"></div>
+      <button class="wd-add-btn" id="wdOutfitAddBtn" type="button">＋ New outfit</button>
+    </div>
+    <div class="wd-grid" id="wdOutfitGrid"></div>
+  </div>
 
 </div><!-- /.page -->
 
@@ -371,8 +518,36 @@ body::after {
       </div>
     </div>
 
+    <div class="field">
+      <label class="field-label" for="wdNotes">Notes <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--text-tertiary)">— brand, size, anything (optional)</span></label>
+      <textarea class="wd-textarea" id="wdNotes" placeholder="e.g. Uniqlo · size M · faded navy" maxlength="500"></textarea>
+    </div>
+
     <button class="wd-save" id="wdSave" type="button">Save item</button>
     <div class="wd-status" id="wdStatus"></div>
+  </div>
+</div>
+
+<!-- ===== Outfit add / edit modal ===== -->
+<div class="modal-bg" id="wdOutfitModalBg">
+  <div class="modal" role="dialog" aria-label="Outfit">
+    <div class="modal-head">
+      <span class="modal-title" id="wdOutfitModalTitle">New outfit</span>
+      <button class="modal-close" id="wdOutfitModalClose" type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="wdOutfitName">Name</label>
+      <input class="wd-input" id="wdOutfitName" type="text" placeholder="e.g. Casual Friday" autocomplete="off" maxlength="60" style="width:100%">
+    </div>
+
+    <div class="field">
+      <label class="field-label">Items <span id="wdOutfitCount" style="text-transform:none;letter-spacing:0;color:var(--text-tertiary)"></span></label>
+      <div class="wd-pick-grid" id="wdOutfitPicker"></div>
+    </div>
+
+    <button class="wd-save" id="wdOutfitSave" type="button">Save outfit</button>
+    <div class="wd-status" id="wdOutfitStatus"></div>
   </div>
 </div>
 
@@ -402,10 +577,16 @@ body::after {
 
   // ===================== data model =====================
   // localStorage key 'wardrobe_items' holds:
-  //   { items: [ { id, category, photo_paths: [p1, p2], added_date } ],
+  //   { items: [ { id, category, photo_paths: [p1, p2], added_date, notes } ],
   //     categories: ['t-shirt', ...] }
-  // The sync helper mirrors this key into the app_state row 'wardrobe'.
+  //   `notes` is the user's own free text (brand/size/etc). It is SEPARATE from
+  //   the AI-generated `description` field written by the nova-batch script —
+  //   that field is left untouched here.
+  // localStorage key 'wardrobe_outfits' holds:
+  //   { outfits: [ { id, name, item_ids: [...], created_date } ] }
+  // The sync helper mirrors BOTH keys into the single app_state row 'wardrobe'.
   const STORE_KEY = 'wardrobe_items';
+  const OUTFITS_KEY = 'wardrobe_outfits';
   const DEFAULT_CATEGORIES = ['t-shirt', 'trousers', 'shoes', 'trainers'];
 
   function loadStore() {
@@ -418,6 +599,16 @@ body::after {
   }
   function saveStore(s) {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  function loadOutfits() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(OUTFITS_KEY)); } catch (e) {}
+    if (!s || typeof s !== 'object') s = {};
+    if (!Array.isArray(s.outfits)) s.outfits = [];
+    return s;
+  }
+  function saveOutfits(s) {
+    try { localStorage.setItem(OUTFITS_KEY, JSON.stringify(s)); } catch (e) {}
   }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function todayStr() {
@@ -435,7 +626,9 @@ body::after {
   }
 
   let store = loadStore();
+  let outfits = loadOutfits();
   let activeFilter = 'all';
+  let activeTab = 'items';
 
   // ===================== image compression =====================
   // Decode → scale so the longest side is 800px (never upscale) → JPEG @0.72.
@@ -601,6 +794,13 @@ body::after {
     cat.className = 'wd-cat';
     cat.textContent = item.category || 'Uncategorized';
     meta.appendChild(cat);
+    if (item.notes && String(item.notes).trim()) {
+      const nt = document.createElement('div');
+      nt.className = 'wd-notes';
+      nt.textContent = String(item.notes).trim();
+      nt.title = String(item.notes).trim();
+      meta.appendChild(nt);
+    }
     if (item.added_date) {
       const dt = document.createElement('div');
       dt.className = 'wd-date';
@@ -665,6 +865,14 @@ body::after {
     await deletePhotos(item.photo_paths || []);
     store.items = store.items.filter(it => it.id !== id);
     saveStore(store);
+    // auto-remove this item from any saved outfits that referenced it
+    let outfitsChanged = false;
+    outfits.outfits.forEach(o => {
+      const before = o.item_ids.length;
+      o.item_ids = (o.item_ids || []).filter(x => x !== id);
+      if (o.item_ids.length !== before) outfitsChanged = true;
+    });
+    if (outfitsChanged) saveOutfits(outfits);
     render();
   }
 
@@ -752,6 +960,7 @@ body::after {
     renderCategoryOptions(null);
     hideNewCat();
     renderSlots();
+    $('wdNotes').value = '';
     setStatus(storageReady() ? '' : 'Cloud storage unavailable — cannot upload right now.', !storageReady());
     $('wdModalBg').classList.add('show');
   }
@@ -768,6 +977,7 @@ body::after {
     renderCategoryOptions(item.category);
     hideNewCat();
     renderSlots();
+    $('wdNotes').value = item.notes || '';
     setStatus('');
     $('wdModalBg').classList.add('show');
   }
@@ -775,6 +985,7 @@ body::after {
     $('wdModalBg').classList.remove('show');
     resetSlots();
     $('wdFile0').value = ''; $('wdFile1').value = '';
+    $('wdNotes').value = '';
     hideNewCat();
   }
 
@@ -798,6 +1009,7 @@ body::after {
 
     const category = $('wdCategory').value;
     if (!category) { setStatus('Pick a category first.', true); return; }
+    const notes = $('wdNotes').value.trim();
 
     // slot 0 is required: it must end up with either a new file or an existing photo
     const hasSlot0 = !!(slots[0].file || slots[0].existingPath);
@@ -842,9 +1054,9 @@ body::after {
 
       if (editingId) {
         const it = store.items.find(x => x.id === editingId);
-        if (it) { it.category = category; it.photo_paths = photo_paths; }
+        if (it) { it.category = category; it.photo_paths = photo_paths; it.notes = notes; }
       } else {
-        store.items.unshift({ id, category, photo_paths, added_date: todayStr() });
+        store.items.unshift({ id, category, photo_paths, added_date: todayStr(), notes });
       }
       saveStore(store);
 
@@ -864,11 +1076,354 @@ body::after {
     saveBtn.disabled = false;
   }
 
+  // ===================== outfits =====================
+  function itemById(id) { return store.items.find(it => it.id === id) || null; }
+
+  function renderOutfitGrid() {
+    const grid = $('wdOutfitGrid');
+    grid.innerHTML = '';
+    if (!outfits.outfits.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = store.items.length
+        ? 'No outfits yet — tap “＋ New outfit” to combine items you own.'
+        : 'Add some wardrobe items first, then combine them into outfits here.';
+      grid.appendChild(empty);
+      return;
+    }
+    outfits.outfits.forEach(o => grid.appendChild(buildOutfitCard(o)));
+  }
+
+  function buildOutfitCard(outfit) {
+    const card = document.createElement('div');
+    card.className = 'wd-card';
+
+    // resolve referenced items that still exist, plus each one's first photo
+    const its = (outfit.item_ids || []).map(itemById).filter(Boolean);
+    const thumbs = its.map(it => (it.photo_paths || []).filter(Boolean)[0] || null);
+
+    if (thumbs.length) {
+      const shown = thumbs.slice(0, 4);
+      const collage = document.createElement('div');
+      collage.className = 'wd-outfit-collage n' + shown.length;
+      shown.forEach(path => {
+        const cell = document.createElement('div');
+        cell.className = 'wd-collage-cell';
+        if (path) {
+          const img = document.createElement('img');
+          img.loading = 'lazy'; img.alt = outfit.name || 'Outfit item';
+          img.src = publicUrl(path);
+          cell.appendChild(img);
+        } else {
+          const ph = document.createElement('span');
+          ph.className = 'wd-collage-ph'; ph.textContent = '👕';
+          cell.appendChild(ph);
+        }
+        collage.appendChild(cell);
+      });
+      if (thumbs.length > 4) {
+        const more = document.createElement('div');
+        more.className = 'wd-collage-more';
+        more.textContent = '+' + (thumbs.length - 4);
+        collage.appendChild(more);
+      }
+      card.appendChild(collage);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'wd-outfit-empty';
+      empty.textContent = '🧥';
+      card.appendChild(empty);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'wd-card-body';
+    const meta = document.createElement('div');
+    meta.className = 'wd-card-meta';
+    const name = document.createElement('div');
+    name.className = 'wd-outfit-name';
+    name.textContent = outfit.name || 'Untitled outfit';
+    name.title = outfit.name || '';
+    meta.appendChild(name);
+    const cnt = document.createElement('div');
+    cnt.className = 'wd-date';
+    cnt.textContent = its.length + (its.length === 1 ? ' item' : ' items');
+    meta.appendChild(cnt);
+    body.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'wd-actions';
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button'; editBtn.className = 'wd-icon-btn';
+    editBtn.title = 'Edit'; editBtn.setAttribute('aria-label', 'Edit outfit');
+    editBtn.textContent = '✎';
+    editBtn.addEventListener('click', () => openOutfitEdit(outfit.id));
+    actions.appendChild(editBtn);
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button'; delBtn.className = 'wd-icon-btn wd-del';
+    delBtn.title = 'Delete'; delBtn.setAttribute('aria-label', 'Delete outfit');
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', () => showOutfitDeleteConfirm(card, outfit.id));
+    actions.appendChild(delBtn);
+    body.appendChild(actions);
+    card.appendChild(body);
+    return card;
+  }
+
+  function showOutfitDeleteConfirm(card, id) {
+    if (card.querySelector('.wd-confirm')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'wd-confirm';
+    const text = document.createElement('div');
+    text.className = 'wd-confirm-text';
+    text.textContent = 'Delete this outfit? (Your items are kept.)';
+    const row = document.createElement('div');
+    row.className = 'wd-confirm-row';
+    const yes = document.createElement('button');
+    yes.type = 'button'; yes.className = 'wd-btn-danger'; yes.textContent = 'Delete';
+    const no = document.createElement('button');
+    no.type = 'button'; no.className = 'wd-btn-ghost'; no.textContent = 'Cancel';
+    yes.addEventListener('click', () => {
+      outfits.outfits = outfits.outfits.filter(o => o.id !== id);
+      saveOutfits(outfits);
+      render();
+    });
+    no.addEventListener('click', () => overlay.remove());
+    row.appendChild(yes); row.appendChild(no);
+    overlay.appendChild(text); overlay.appendChild(row);
+    card.appendChild(overlay);
+  }
+
+  // ---- outfit editor modal ----
+  let outfitEditingId = null;
+  let outfitSel = [];   // ordered list of currently-selected item ids
+
+  function setOutfitStatus(msg, isErr) {
+    const el = $('wdOutfitStatus');
+    el.textContent = msg || '';
+    el.classList.toggle('err', !!isErr);
+  }
+  function updateOutfitCount() {
+    $('wdOutfitCount').textContent = outfitSel.length ? '· ' + outfitSel.length + ' selected' : '';
+  }
+
+  function renderOutfitPicker() {
+    const wrap = $('wdOutfitPicker');
+    wrap.innerHTML = '';
+    if (!store.items.length) {
+      const e = document.createElement('div');
+      e.className = 'wd-pick-empty';
+      e.textContent = 'No items to pick yet — add wardrobe items first.';
+      wrap.appendChild(e);
+      updateOutfitCount();
+      return;
+    }
+    store.items.forEach(it => {
+      const cell = document.createElement('div');
+      cell.className = 'wd-pick' + (outfitSel.indexOf(it.id) !== -1 ? ' sel' : '');
+      const photo = document.createElement('div');
+      photo.className = 'wd-pick-photo';
+      const path = (it.photo_paths || []).filter(Boolean)[0];
+      if (path) {
+        const img = document.createElement('img');
+        img.loading = 'lazy'; img.alt = it.category || 'Item';
+        img.src = publicUrl(path);
+        photo.appendChild(img);
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'wd-collage-ph'; ph.textContent = '👕';
+        photo.appendChild(ph);
+      }
+      cell.appendChild(photo);
+      const cat = document.createElement('div');
+      cat.className = 'wd-pick-cat';
+      cat.textContent = it.category || 'Item';
+      cell.appendChild(cat);
+      const check = document.createElement('div');
+      check.className = 'wd-pick-check'; check.textContent = '✓';
+      cell.appendChild(check);
+      cell.addEventListener('click', () => {
+        const i = outfitSel.indexOf(it.id);
+        if (i === -1) outfitSel.push(it.id); else outfitSel.splice(i, 1);
+        cell.classList.toggle('sel');
+        updateOutfitCount();
+        setOutfitStatus('');
+      });
+      wrap.appendChild(cell);
+    });
+    updateOutfitCount();
+  }
+
+  function openOutfitAdd() {
+    outfitEditingId = null;
+    outfitSel = [];
+    $('wdOutfitModalTitle').textContent = 'New outfit';
+    $('wdOutfitSave').textContent = 'Save outfit';
+    $('wdOutfitName').value = '';
+    setOutfitStatus('');
+    renderOutfitPicker();
+    $('wdOutfitModalBg').classList.add('show');
+    $('wdOutfitName').focus();
+  }
+  function openOutfitEdit(id) {
+    const o = outfits.outfits.find(x => x.id === id);
+    if (!o) return;
+    outfitEditingId = id;
+    outfitSel = (o.item_ids || []).filter(x => itemById(x));  // drop any stale ids
+    $('wdOutfitModalTitle').textContent = 'Edit outfit';
+    $('wdOutfitSave').textContent = 'Save changes';
+    $('wdOutfitName').value = o.name || '';
+    setOutfitStatus('');
+    renderOutfitPicker();
+    $('wdOutfitModalBg').classList.add('show');
+  }
+  function closeOutfitModal() {
+    $('wdOutfitModalBg').classList.remove('show');
+    outfitSel = [];
+  }
+  function submitOutfit() {
+    const name = $('wdOutfitName').value.trim();
+    if (!name) { setOutfitStatus('Give the outfit a name.', true); $('wdOutfitName').focus(); return; }
+    if (!outfitSel.length) { setOutfitStatus('Pick at least one item.', true); return; }
+    if (outfitEditingId) {
+      const o = outfits.outfits.find(x => x.id === outfitEditingId);
+      if (o) { o.name = name; o.item_ids = outfitSel.slice(); }
+    } else {
+      outfits.outfits.unshift({ id: uid(), name, item_ids: outfitSel.slice(), created_date: todayStr() });
+    }
+    saveOutfits(outfits);
+    closeOutfitModal();
+    render();
+  }
+
+  // ===================== weather (Open-Meteo, client-side) =====================
+  // Fetched once per page load, then cached in memory so switching between the
+  // Items/Outfits tabs re-renders from cache without hitting the network again.
+  let weatherState = { status: 'idle', hours: null };
+
+  const WMO_ICON = {
+    0: '☀️',
+    1: '🌤️', 2: '⛅', 3: '☁️',
+    45: '🌫️', 48: '🌫️',
+    51: '🌦️', 53: '🌦️', 55: '🌦️', 56: '🌧️', 57: '🌧️',
+    61: '🌧️', 63: '🌧️', 65: '🌧️', 66: '🌧️', 67: '🌧️',
+    71: '🌨️', 73: '🌨️', 75: '🌨️', 77: '🌨️',
+    80: '🌦️', 81: '🌧️', 82: '🌧️',
+    85: '🌨️', 86: '🌨️',
+    95: '⛈️', 96: '⛈️', 99: '⛈️',
+  };
+  function wxIcon(code) { return (code != null && WMO_ICON[code]) || '🌡️'; }
+
+  function renderWeather() {
+    const box = $('wdWeather');
+    box.innerHTML = '';
+    const st = weatherState;
+    function msg(text, cls) {
+      const m = document.createElement('div');
+      m.className = cls || 'wd-weather-msg';
+      m.textContent = text;
+      box.appendChild(m);
+    }
+    if (st.status === 'idle' || st.status === 'loading') { msg('Loading local forecast…', 'wd-weather-loading'); return; }
+    if (st.status === 'denied') { msg('Location is off, so the local forecast is hidden. Enable location for this site to see the next 12 hours.'); return; }
+    if (st.status === 'error' || !st.hours || !st.hours.length) { msg('Couldn’t load the forecast right now.'); return; }
+
+    const strip = document.createElement('div');
+    strip.className = 'wd-weather-strip';
+    st.hours.forEach((h, i) => {
+      const cell = document.createElement('div');
+      cell.className = 'wd-hour' + (i === 0 ? ' now' : '');
+      const t = document.createElement('div');
+      t.className = 'wd-hour-time';
+      t.textContent = i === 0 ? 'Now' : h.label;
+      cell.appendChild(t);
+      const ic = document.createElement('div');
+      ic.className = 'wd-hour-icon';
+      ic.textContent = h.icon;
+      cell.appendChild(ic);
+      const tm = document.createElement('div');
+      tm.className = 'wd-hour-temp';
+      tm.textContent = (h.temp != null) ? Math.round(h.temp) + '°' : '–';
+      cell.appendChild(tm);
+      const pop = document.createElement('div');
+      const hasPop = h.pop != null;
+      pop.className = 'wd-hour-pop' + (hasPop && h.pop > 0 ? '' : ' dry');
+      pop.textContent = hasPop ? '💧' + h.pop + '%' : '';
+      cell.appendChild(pop);
+      strip.appendChild(cell);
+    });
+    box.appendChild(strip);
+  }
+
+  function initWeather() {
+    if (weatherState.status !== 'idle') { renderWeather(); return; }  // already fetched this session
+    if (!('geolocation' in navigator)) { weatherState = { status: 'error', hours: null }; renderWeather(); return; }
+    weatherState.status = 'loading';
+    renderWeather();
+    navigator.geolocation.getCurrentPosition(
+      (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+      (err) => {
+        weatherState = { status: (err && err.code === err.PERMISSION_DENIED) ? 'denied' : 'error', hours: null };
+        renderWeather();
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+    );
+  }
+
+  async function fetchWeather(lat, lon) {
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast'
+        + '?latitude=' + encodeURIComponent(lat.toFixed(4))
+        + '&longitude=' + encodeURIComponent(lon.toFixed(4))
+        + '&hourly=temperature_2m,precipitation_probability,weather_code'
+        + '&temperature_unit=celsius&timezone=auto&forecast_days=2';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const h = data && data.hourly;
+      if (!h || !Array.isArray(h.time) || !h.time.length) throw new Error('bad payload');
+
+      const now = Date.now();
+      let start = h.time.findIndex(t => new Date(t).getTime() >= now - 60 * 60 * 1000);
+      if (start < 0) start = 0;
+
+      const hours = [];
+      for (let i = start; i < h.time.length && hours.length < 12; i++) {
+        const d = new Date(h.time[i]);
+        let hr = d.getHours();
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        let h12 = hr % 12; if (h12 === 0) h12 = 12;
+        hours.push({
+          label: h12 + ' ' + ampm,
+          temp: (h.temperature_2m && h.temperature_2m[i] != null) ? h.temperature_2m[i] : null,
+          pop: (h.precipitation_probability && h.precipitation_probability[i] != null) ? h.precipitation_probability[i] : null,
+          icon: wxIcon(h.weather_code ? h.weather_code[i] : null),
+        });
+      }
+      weatherState = { status: 'ok', hours };
+    } catch (e) {
+      weatherState = { status: 'error', hours: null };
+    }
+    renderWeather();
+  }
+
+  // ===================== tabs =====================
+  function switchTab(tab) {
+    activeTab = (tab === 'outfits') ? 'outfits' : 'items';
+    $('wdItemsView').style.display = activeTab === 'items' ? '' : 'none';
+    $('wdOutfitsView').style.display = activeTab === 'outfits' ? '' : 'none';
+    $('wdTabItems').classList.toggle('active', activeTab === 'items');
+    $('wdTabOutfits').classList.toggle('active', activeTab === 'outfits');
+    $('wdTabItems').setAttribute('aria-selected', activeTab === 'items');
+    $('wdTabOutfits').setAttribute('aria-selected', activeTab === 'outfits');
+  }
+
   // ===================== render + boot =====================
   function render() {
     store = loadStore();
+    outfits = loadOutfits();
     renderFilters();
     renderGrid();
+    renderOutfitGrid();
   }
 
   function boot() {
@@ -907,17 +1462,32 @@ body::after {
 
     $('wdSave').addEventListener('click', submit);
 
+    // tabs
+    $('wdTabItems').addEventListener('click', () => switchTab('items'));
+    $('wdTabOutfits').addEventListener('click', () => switchTab('outfits'));
+
+    // outfit modal
+    $('wdOutfitAddBtn').addEventListener('click', openOutfitAdd);
+    $('wdOutfitModalClose').addEventListener('click', closeOutfitModal);
+    $('wdOutfitModalBg').addEventListener('click', (e) => { if (e.target === $('wdOutfitModalBg')) closeOutfitModal(); });
+    $('wdOutfitSave').addEventListener('click', submitOutfit);
+    $('wdOutfitName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitOutfit(); } });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('wdOutfitModalBg').classList.contains('show')) closeOutfitModal();
+    });
+
     render();
+    initWeather();
 
     // ---------- cloud sync ----------
     if (window.initCloudSync) {
       window.initCloudSync({
         appKey: 'wardrobe',
-        syncedKeys: [STORE_KEY],
+        syncedKeys: [STORE_KEY, OUTFITS_KEY],
         onApplied: render,
       });
     }
-    window.addEventListener('storage', (e) => { if (!e.key || e.key === STORE_KEY) render(); });
+    window.addEventListener('storage', (e) => { if (!e.key || e.key === STORE_KEY || e.key === OUTFITS_KEY) render(); });
   }
 
   if (document.readyState === 'loading') {
