@@ -18,7 +18,7 @@ silently, it's almost always one of these policies missing.
   mirroring how `app_state` is fully open to the anon key.
 
 Images are served via each object's **public URL** (`getPublicUrl`), so reads need no signed
-links. Everything is still behind the shared passcode in [`lock.js`](lock.js).
+links. The page itself is behind the Supabase Auth gate in [`auth.js`](auth.js).
 
 ---
 
@@ -92,7 +92,7 @@ The module is self-contained and touches nothing else (Calendar, Finance, Traini
 To-Do/Goals, Reading, biweekly list, Nova are all untouched):
 
 - **Added:** [`wardrobe.html`](wardrobe.html), one tile in [`index.html`](index.html) (`·09`),
-  and this doc. Reuses `lock.js`, `sync.js`, `topbar.js`, `/api/config` unchanged.
+  and this doc. Reuses `auth.js`, `sync.js`, `topbar.js`, `/api/config` unchanged.
 - **To remove it completely:** delete `wardrobe.html`, remove the `·09` tile from
   `index.html`, delete the `wardrobe` row from `app_state`, and delete the `wardrobe-photos`
   bucket (and its policies).

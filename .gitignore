@@ -1,6 +1,15 @@
 node_modules/
 .vercel/
-.env
-.env.local
+
+# Env / secrets — never commit. Broad glob so .env.production,
+# .env.test, etc. are covered by default.
+.env*
+!.env.example
+
 nova-batch/logs/
 nova-batch/.nova-batch.lock
+
+# Local-only reference material (plans, specs, agent notes).
+# Kept on disk, deliberately not published to GitHub.
+docs/superpowers/
+CLAUDE.md

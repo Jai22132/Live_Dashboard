@@ -12,8 +12,10 @@ devices with **Supabase**.
 3. Framework Preset: **Other**. Root Directory: **`./`**. Build/output: leave blank (static).
 4. **Deploy.** You'll get a URL like `https://your-app.vercel.app`.
 
-The dashboard opens to a **password screen** — the default password is in
-[`lock.js`](lock.js) (`var PASSWORD = "qwer"`). Change it to whatever you want.
+The dashboard opens to a **sign-in screen** ([`login.html`](login.html)), backed by
+**Supabase Auth** (email + password). There is no self-signup: create your user in
+Supabase → **Authentication → Users → Add user**. Every page loads
+[`auth.js`](auth.js), which hides the page until a valid session exists.
 
 ---
 
@@ -39,6 +41,10 @@ create policy "anon full access app_state"
 -- Instant cross-device updates:
 alter publication supabase_realtime add table public.app_state;
 ```
+
+> The `anon` policy above is still what's live. Once you've verified sign-in works,
+> [`supabase/rls-authenticated.sql`](supabase/rls-authenticated.sql) tightens `app_state`
+> so only **authenticated** users can read/write it.
 
 ### Connect YOUR Supabase — pick ONE way
 Supabase → **Project Settings → API**. Copy the **Project URL** and the **anon / publishable** key.
@@ -106,4 +112,4 @@ console.anthropic.com.
 1. Fork → import to Vercel → deploy.
 2. New Supabase → run the **SQL** above → paste your **URL + anon key** into `sync.js`,
    `topbar.js`, `gym.html`.
-3. Change the password in `lock.js`. Done.
+3. Supabase → **Authentication → Users → Add user** — that's your dashboard login. Done.
