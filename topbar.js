@@ -205,9 +205,6 @@ body.topbar-modal-open {
     </a>
     <button class="topbar-water-add" id="topbarWaterAdd" aria-label="Log one drink" type="button">+</button>
   </div>
-  <a href="training.html" class="topbar-finance-btn" id="topbarTraining" aria-label="Training Hub">
-    <span class="topbar-finance-icon">🏋️</span>
-  </a>
   <button class="topbar-finance-btn" id="topbarLogout" aria-label="Log out" title="Log out" type="button">
     <span class="topbar-finance-icon">⏻</span>
   </button>
@@ -220,13 +217,17 @@ body.topbar-modal-open {
     <span class="bottombar-tab-icon">🏠</span>
     <span>Main</span>
   </a>
-  <a href="health.html" class="bottombar-tab" data-page="health">
-    <span class="bottombar-tab-icon">💊</span>
-    <span>Health</span>
+  <a href="finance.html" class="bottombar-tab" data-page="finance">
+    <span class="bottombar-tab-icon">📊</span>
+    <span>Finance</span>
   </a>
-  <a href="gym.html" class="bottombar-tab" data-page="fitness">
-    <span class="bottombar-tab-icon">💪</span>
-    <span>Fitness</span>
+  <a href="training.html" class="bottombar-tab" data-page="training">
+    <span class="bottombar-tab-icon">🏋️</span>
+    <span>Training</span>
+  </a>
+  <a href="wardrobe.html" class="bottombar-tab" data-page="wardrobe">
+    <span class="bottombar-tab-icon">👕</span>
+    <span>Wardrobe</span>
   </a>
 </nav>
 `;
@@ -247,8 +248,9 @@ body.topbar-modal-open {
   }
   function currentPageKey() {
     const p = (window.location.pathname || '').toLowerCase();
-    if (p.endsWith('health.html')) return 'health';
-    if (p.endsWith('gym.html')) return 'fitness';
+    if (p.endsWith('finance.html')) return 'finance';
+    if (p.endsWith('training.html')) return 'training';
+    if (p.endsWith('wardrobe.html')) return 'wardrobe';
     return 'main'; // index.html, /, or anything else falls back to main
   }
 

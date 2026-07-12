@@ -63,7 +63,6 @@ Redeploy. The app reads these automatically via `/api/config`.
 Replace the old URL/key in these files:
 - [`sync.js`](sync.js)
 - [`topbar.js`](topbar.js)
-- [`gym.html`](gym.html)
 
 > ⚠️ Only the **anon** key (public) is used here. **Never** put the `service_role` key in code
 > or in these env vars.
@@ -110,6 +109,6 @@ console.anthropic.com.
 
 ## TL;DR
 1. Fork → import to Vercel → deploy.
-2. New Supabase → run the **SQL** above → paste your **URL + anon key** into `sync.js`,
-   `topbar.js`, `gym.html`.
+2. New Supabase → run the **SQL** above → paste your **URL + anon key** into `sync.js`
+   and `topbar.js`.
 3. Supabase → **Authentication → Users → Add user** — that's your dashboard login. Done.

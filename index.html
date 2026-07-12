@@ -57,7 +57,14 @@ body::after {
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
 }
-@media (max-width: 480px) { .dash-title { font-size: 22px; } }
+.dash-subtitle {
+  margin: 4px 0 0; font-size: 14px; font-style: italic; font-weight: 400;
+  letter-spacing: 0.01em; color: var(--text-tertiary);
+}
+@media (max-width: 480px) {
+  .dash-title { font-size: 22px; }
+  .dash-subtitle { font-size: 12px; }
+}
 
 /* ===== BENTO GRID ===== */
 .bento {
@@ -140,6 +147,7 @@ body::after {
 /* ===== Header row + gear ===== */
 .hub-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .hub-head .dash-title { margin: 0; }
+.hub-heading { min-width: 0; }
 .gear-btn {
   width: 42px; height: 42px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -198,7 +206,10 @@ body::after {
 <div class="page">
 
   <div class="hub-head">
-    <h1 class="dash-title">Rowans Dashboard</h1>
+    <div class="hub-heading">
+      <h1 class="dash-title">Jaime's Dashboard</h1>
+      <p class="dash-subtitle">Be Better Everyday</p>
+    </div>
     <button class="gear-btn" id="settingsOpen" type="button" aria-label="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
@@ -224,7 +235,7 @@ body::after {
     </a>
 
     <!-- Wide tile -->
-    <a class="tile wide" href="gym.html" style="--accent:#7DD3FC">
+    <a class="tile wide" href="training.html" style="--accent:#7DD3FC">
       <div class="tile-top">
         <span class="tile-num">·02</span>
         <span class="tile-emoji">💪</span>

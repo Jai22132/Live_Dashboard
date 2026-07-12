@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050506">
-<title>Rowans Dashboard</title>
+<title>Jaime's Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="auth.js"></script>
 <script src="sync.js" defer></script>
@@ -68,8 +68,9 @@ body::after {
 }
 
 /* ===== Component 1: page title ===== */
+.dash-heading { margin: 0 0 14px; }
 .dash-title {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -79,7 +80,18 @@ body::after {
   -webkit-text-fill-color: transparent;
   color: transparent;
 }
-@media (max-width: 480px) { .dash-title { font-size: 22px; } }
+.dash-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--text-tertiary);
+}
+@media (max-width: 480px) {
+  .dash-title { font-size: 22px; }
+  .dash-subtitle { font-size: 12px; }
+}
 
 /* ===== Component 2: Goal Ticker ===== */
 .ticker-row {
@@ -676,7 +688,10 @@ body::after {
 <body>
 <div class="page">
 
-  <h1 class="dash-title">Rowans Dashboard</h1>
+  <div class="dash-heading">
+    <h1 class="dash-title">Jaime's Dashboard</h1>
+    <p class="dash-subtitle">Be Better Everyday</p>
+  </div>
 
   <div class="ticker-row">
     <div class="goal-ticker" id="goalTicker" aria-live="polite" aria-atomic="true">

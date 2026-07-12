@@ -18,7 +18,10 @@ Open any `.html` file directly in your browser — no build step, no install.
 | [health.html](health.html) | Supplement / daily stack tracker |
 | [po-water.html](po-water.html) | Water intake tracker |
 | [finance.html](finance.html) | Finances |
-| [gym.html](gym.html) | Progressive overload gym tracker |
+| [training.html](training.html) | Training & workout hub |
 | [topbar.js](topbar.js) | Shared top bar — auto-injected into pages that `<script src="topbar.js">` |
+
+`rowans-gym.html` is an archived progressive-overload gym tracker. It still opens if you
+navigate to it directly, but nothing in the app links to it — `training.html` replaced it.
 
 State syncs across devices via Supabase (see [SETUP.md](SETUP.md)). Pages are gated behind a Supabase Auth sign-in.
